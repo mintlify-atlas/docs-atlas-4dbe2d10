@@ -1,0 +1,174 @@
+---
+title: 'Validate MSO MDoc device response'
+api: 'POST /utilities/validations/msoMdoc/deviceResponse'
+description: 'Validate an MSO MDoc DeviceResponse and verify document integrity'
+---
+
+## Overview
+
+This utility endpoint validates an MSO MDoc DeviceResponse to ensure it meets security and integrity requirements. Use this endpoint to verify credentials before accepting them in your application.
+
+<Info>
+This is a utility endpoint for testing and validation purposes. For production credential verification, use the main [Verifier API](/api/verifier/initialize-transaction) flow.
+</Info>
+
+## Validations performed
+
+The endpoint performs the following security checks:
+
+<Steps>
+  <Step title="Format validation">
+    Verifies the provided value is an MSO MDoc DeviceResponse encoded using Base64 URL Safe encoding
+  </Step>
+  <Step title="Validity period">
+    Checks that MSO MDoc Documents contain non-expired ValidityInfo
+  </Step>
+  <Step title="Document type">
+    Verifies documents are of the expected docType
+  </Step>
+  <Step title="Digest verification">
+    Validates that IssuerSigned items contain valid Digests
+  </Step>
+  <Step title="Issuer trust">
+    Confirms documents are signed by a trusted Issuer (checked against a configured X5C chain)
+  </Step>
+</Steps>
+
+## Request
+
+<ParamField body="device_response" type="string" required>
+  The MSO MDoc DeviceResponse encoded using Base64 URL Safe encoding
+</ParamField>
+
+<ParamField body="issuer_chain" type="string">
+  Optional X5C certificate chain for issuer verification
+</ParamField>
+
+## Response
+
+<Tabs>
+  <Tab title="Success">
+    When validation succeeds, the endpoint returns a simplified view of the successfully validated MSO MDoc Documents.
+
+    <ResponseField name="[].docType" type="string" required>
+      The document type identifier (e.g., `eu.europa.ec.eudi.pid.1`)
+    </ResponseField>
+
+    <ResponseField name="[].attributes" type="object" required>
+      Object containing namespaced attributes from the document
+      
+      <Expandable title="properties">
+        <ResponseField name="[namespace]" type="object">
+          Key-value pairs of attributes within the namespace. Each attribute represents a verified claim from the credential.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+
+    <ResponseExample>
+    ```json Success response
+    [
+      {
+        "docType": "eu.europa.ec.eudi.pid.1",
+        "attributes": {
+          "eu.europa.ec.eudi.pid.1": {
+            "age_over_18": true
+          }
+        }
+      }
+    ]
+    ```
+    </ResponseExample>
+  </Tab>
+
+  <Tab title="Error">
+    When validation fails, the endpoint returns a detailed error response identifying all violations found.
+
+    <ResponseField name="type" type="string" required>
+      Error type identifier (e.g., `InvalidDocuments`)
+    </ResponseField>
+
+    <ResponseField name="invalidDocuments" type="array">
+      List of documents that failed validation
+      
+      <Expandable title="properties">
+        <ResponseField name="index" type="number">
+          Zero-based index of the invalid document in the DeviceResponse
+        </ResponseField>
+        
+        <ResponseField name="documentType" type="string">
+          The document type that failed validation
+        </ResponseField>
+        
+        <ResponseField name="errors" type="string[]">
+          Array of error codes describing what validations failed (e.g., `InvalidIssuerSignedItems`, `ExpiredDocument`)
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+
+    <ResponseExample>
+    ```json Error response
+    {
+      "type": "InvalidDocuments",
+      "invalidDocuments": [
+        {
+          "index": 0,
+          "documentType": "eu.europa.ec.eudi.pid.1",
+          "errors": [
+            "InvalidIssuerSignedItems"
+          ]
+        }
+      ]
+    }
+    ```
+    </ResponseExample>
+  </Tab>
+</Tabs>
+
+## Example
+
+<RequestExample>
+
+```bash cURL
+curl -v -X POST 'http://localhost:8080/utilities/validations/msoMdoc/deviceResponse' \
+  -H "Content-type: application/x-www-form-urlencoded" \
+  -H "Accept: application/json" \
+  --data-urlencode "device_response=o2d2ZXJzaW9uYzEuMGlkb2N1bWVudHOBo2dkb2NUeXBld2V1LmV1cm9wYS5lYy5ldWRpLnBpZC4xbGlzc3VlclNpZ25lZKJqbmFtZVNwYWNlc6F3ZXUuZXVyb3BhLmVjLmV1ZGkucGlkLjGB2BhYT6RmcmFuZG9tUEXjK7Y2ozEyo1cV38gioLxoZGlnZXN0SUQEbGVsZW1lbnRWYWx1ZfVxZWxlbWVudElkZW50aWZpZXJrYWdlX292ZXJfMThqaXNzdWVyQXV0aIRDoQEmoRghWQLmMIIC4jCCAmmgAwIBAgIUaJK7OBpIQJ15sETltVo4Oe7zkbwwCgYIKoZIzj0EAwIwXDEeMBwGA1UEAwwVUElEIElzc3VlciBDQSAtIFVUIDAxMS0wKwYDVQQKDCRFVURJIFdhbGxldCBSZWZlcmVuY2UgSW1wbGVtZW50YXRpb24xCzAJBgNVBAYTAlVUMB4XDTI0MTAxMDA5NTM1MVoXDTI2MDEwMzA5NTM1MFowUzEVMBMGA1UEAwwMUElEIERTIC0gMDA2MS0wKwYDVQQKDCRFVURJIFdhbGxldCBSZWZlcmVuY2UgSW1wbGVtZW50YXRpb24xCzAJBgNVBAYTAlVUMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEXboaixZVp_52Qq0v4OdYHIJ_QQ0u7Re4rh7OXtk9shmgaCvTJkOEGgawEPFuoH1bDfyP4EPkSiXOrtpwAMdiRKOCARAwggEMMB8GA1UdIwQYMBaAFLNsuJEXHNekGmYxh0Lhi8BAzJUbMBYGA1UdJQEB_wQMMAoGCCuBAgIAAAECMEMGA1UdHwQ8MDowOKA2oDSGMmh0dHBzOi8vcHJlcHJvZC5wa2kuZXVkaXcuZGV2L2NybC9waWRfQ0FfVVRfMDEuY3JsMB0GA1UdDgQWBBRvpijzc7AgPsNYos4qpt66AbAGDDAOBgNVHQ8BAf8EBAMCB4AwXQYDVR0SBFYwVIZSaHR0cHM6Ly9naXRodWIuY29tL2V1LWRpZ2l0YWwtaWRlbnRpdHktd2FsbGV0L2FyY2hpdGVjdHVyZS1hbmQtcmVmZXJlbmNlLWZyYW1ld29yazAKBggqhkjOPQQDAgNnADBkAjBBkXCtr6HX8v9hdPqCZwL-75uurOWXUElNUW6GgXNfKBAFN24QQRzEde-Lt0TNZxYCMHkgTqhnfn4pXCRiMdv8qsA2ehnlcDkkQQlHkNEr5FSw5HJD2oIKUvk9dOqRvA9qRFkDktgYWQONpmd2ZXJzaW9uYzEuMG9kaWdlc3RBbGdvcml0aG1nU0hBLTI1Nmx2YWx1ZURpZ2VzdHOhd2V1LmV1cm9wYS5lYy5ldWRpLnBpZC4xsABYIISopvEiMTD6UAMrJ5lonKwDaAfeocslSwz9C77lqo9jAVgg04n_N2pZZRmZu7WSyf3jpwTHaanL-gAlUEQEtkm20fMCWCACqny1LcoRuLIcQeRnFYVmg5BxE7NLJW6Wv7s-laujcQNYIJ6gZtEkkqRyF3xgytoHsWQw1lkRmmAlKFl2GQCXtO8kBFggIN5ygByNwfvO5BGkp8V5WQmWhotd1Cc_7km7-YBmWZsFWCDtsQtSKoaIwyFpuoMsF2bq5alkZ6A8nsuQ6cjp9DK_aQZYICNQ7MIlnzAwHN_ZNSan7m3Dw1isOGseX4-s9rhhsZ_ZB1ggPVpASuGsxDCE67L1wySHy5mkxwC4lR8c-OWJL6xSkEoIWCCX15QP5WFu8Nkd1lz_Kmz5Xl63hGDJnRkQHBm1yX_hfQlYILzK5B4_YscodvPMYHFPq98Wi1T86WnDVJxJ9GZnSGo_ClggVEWmvhfDG1RmciC29spLFhZ1ro3JB0Vs7gfuza22lEILWCAMkABC69jIzOCGMPAXT4oGsktVEQR11O-jkJmsWecguQxYIHu_cEW0m1jXanDG..."
+```
+
+</RequestExample>
+
+## Common errors
+
+<AccordionGroup>
+  <Accordion title="InvalidDocuments">
+    One or more documents in the DeviceResponse failed validation. Check the `invalidDocuments` array in the error response for specific error codes:
+    
+    - `ExpiredDocument` — The document's ValidityInfo indicates it has expired
+    - `InvalidIssuerSignedItems` — The digest verification failed for one or more signed items
+    - `UnexpectedDocType` — The document type doesn't match expected types
+    - `UntrustedIssuer` — The issuer's certificate is not in the trusted chain
+  </Accordion>
+  
+  <Accordion title="InvalidFormat">
+    The provided `device_response` parameter is not valid Base64 URL Safe encoded data or does not represent a valid MSO MDoc DeviceResponse structure.
+  </Accordion>
+  
+  <Accordion title="MissingParameter">
+    The required `device_response` parameter was not provided in the request body.
+  </Accordion>
+</AccordionGroup>
+
+<Note>
+You can also test this endpoint interactively using the [Swagger UI](http://localhost:8080/swagger-ui#/utility%20api/validateMsoMdocDeviceResponse) when running the verifier endpoint locally.
+</Note>
+
+## Related endpoints
+
+<Columns cols={2}>
+  <Card title="Initialize transaction" icon="play" href="/api/verifier/initialize-transaction">
+    Start a credential verification flow
+  </Card>
+  <Card title="Validate SD-JWT VC" icon="shield-check" href="/api/utility/validate-sd-jwt-vc">
+    Validate SD-JWT Verifiable Credentials
+  </Card>
+</Columns>

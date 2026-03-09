@@ -1,0 +1,687 @@
+---
+title: Azure Deployment
+description: Deploy EUDI Verifier Endpoint to Azure Container Registry and App Service
+---
+
+## Overview
+
+This guide covers deploying the EUDI Verifier Endpoint to Microsoft Azure using:
+
+- **Azure Container Registry (ACR)** - For storing Docker images
+- **Azure App Service** - For running containerized applications
+- **Azure CLI** - For command-line deployment
+
+This deployment approach is suitable for production workloads with built-in scaling, monitoring, and security features.
+
+## Prerequisites
+
+Before you begin, ensure you have:
+
+<CardGroup cols={2}>
+  <Card title="Azure CLI" icon="terminal">
+    [Install Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) on your local machine
+  </Card>
+
+  <Card title="Docker" icon="docker">
+    [Install Docker](https://docs.docker.com/get-docker/) with buildx support for multi-platform builds
+  </Card>
+
+  <Card title="Azure Subscription" icon="cloud">
+    Valid Azure subscription with appropriate permissions to create resources
+  </Card>
+
+  <Card title="Azure Container Registry" icon="database">
+    Access to an Azure Container Registry (ACR) instance
+  </Card>
+</CardGroup>
+
+## Deployment Workflow
+
+The deployment process consists of four main steps:
+
+1. Authenticate with Azure
+2. Configure Azure Container Registry
+3. Build and push Docker images
+4. Deploy to Azure App Service
+
+## Step 1: Azure Authentication
+
+<Steps>
+  <Step title="Login to Azure">
+    Authenticate with your Azure tenant:
+
+    ```bash
+    az login --tenant YOUR_TENANT_ID
+    ```
+
+    <Note>
+      Replace `YOUR_TENANT_ID` with your actual Azure tenant ID. You can find this in the Azure Portal under Azure Active Directory.
+    </Note>
+  </Step>
+
+  <Step title="Select subscription">
+    Verify you're using the correct subscription:
+
+    ```bash
+    # List all subscriptions
+    az account list --output table
+
+    # View current subscription
+    az account show --output table
+
+    # Set subscription (if needed)
+    az account set --subscription "Your Subscription Name"
+    ```
+  </Step>
+
+  <Step title="Verify access">
+    Confirm you have access to required resources:
+
+    ```bash
+    # List resource groups
+    az group list --output table
+
+    # List container registries
+    az acr list --output table
+    ```
+  </Step>
+</Steps>
+
+## Step 2: Azure Container Registry Setup
+
+<Steps>
+  <Step title="Login to Container Registry">
+    Authenticate with your Azure Container Registry:
+
+    ```bash
+    az acr login --name YOUR_REGISTRY_NAME
+    ```
+
+    <Note>
+      Replace `YOUR_REGISTRY_NAME` with your ACR name (e.g., `ageverificationdev`). This command configures Docker to authenticate with the registry.
+    </Note>
+  </Step>
+
+  <Step title="Verify registry access">
+    List existing repositories:
+
+    ```bash
+    az acr repository list --name YOUR_REGISTRY_NAME --output table
+    ```
+  </Step>
+
+  <Step title="Get registry login server">
+    Retrieve the fully qualified registry URL:
+
+    ```bash
+    az acr show --name YOUR_REGISTRY_NAME --query loginServer --output tsv
+    ```
+
+    This will output something like: `ageverificationdev.azurecr.io`
+  </Step>
+</Steps>
+
+## Step 3: Build and Push Docker Image
+
+### Option A: Using Gradle (Recommended)
+
+<Steps>
+  <Step title="Build image with Gradle">
+    The project includes Gradle support for building Docker images:
+
+    ```bash
+    ./gradlew bootBuildImage \
+      --imageName=YOUR_REGISTRY.azurecr.io/verifier-endpoint:latest
+    ```
+  </Step>
+
+  <Step title="Tag with version">
+    Create a version tag for better tracking:
+
+    ```bash
+    docker tag YOUR_REGISTRY.azurecr.io/verifier-endpoint:latest \
+      YOUR_REGISTRY.azurecr.io/verifier-endpoint:v1.0.0
+    ```
+  </Step>
+
+  <Step title="Push to registry">
+    Push both tags to Azure Container Registry:
+
+    ```bash
+    docker push YOUR_REGISTRY.azurecr.io/verifier-endpoint:latest
+    docker push YOUR_REGISTRY.azurecr.io/verifier-endpoint:v1.0.0
+    ```
+  </Step>
+</Steps>
+
+### Option B: Using Dockerfile
+
+<Steps>
+  <Step title="Build Docker image">
+    If you have a custom Dockerfile:
+
+    ```bash
+    docker build -t YOUR_REGISTRY.azurecr.io/verifier-endpoint:latest .
+    ```
+  </Step>
+
+  <Step title="Tag image">
+    ```bash
+    docker tag YOUR_REGISTRY.azurecr.io/verifier-endpoint:latest \
+      YOUR_REGISTRY.azurecr.io/verifier-endpoint:v1.0.0
+    ```
+  </Step>
+
+  <Step title="Push to registry">
+    ```bash
+    docker push YOUR_REGISTRY.azurecr.io/verifier-endpoint:latest
+    docker push YOUR_REGISTRY.azurecr.io/verifier-endpoint:v1.0.0
+    ```
+  </Step>
+</Steps>
+
+### Multi-Architecture Build
+
+For ARM-based Azure instances:
+
+```bash
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -t YOUR_REGISTRY.azurecr.io/verifier-endpoint:latest \
+  --push .
+```
+
+<CodeGroup>
+```bash Complete Build Script
+#!/bin/bash
+
+# Configuration
+REGISTRY="ageverificationdev.azurecr.io"
+IMAGE_NAME="verifier-endpoint"
+VERSION="v1.0.0"
+
+# Login to ACR
+az acr login --name ageverificationdev
+
+# Build image
+./gradlew bootBuildImage \
+  --imageName=${REGISTRY}/${IMAGE_NAME}:${VERSION}
+
+# Tag as latest
+docker tag ${REGISTRY}/${IMAGE_NAME}:${VERSION} \
+  ${REGISTRY}/${IMAGE_NAME}:latest
+
+# Push both tags
+docker push ${REGISTRY}/${IMAGE_NAME}:${VERSION}
+docker push ${REGISTRY}/${IMAGE_NAME}:latest
+
+echo "Image pushed successfully!"
+```
+
+```bash Verify Push
+# List all tags for the image
+az acr repository show-tags \
+  --name YOUR_REGISTRY_NAME \
+  --repository verifier-endpoint \
+  --output table
+```
+</CodeGroup>
+
+## Step 4: Azure App Service Deployment
+
+### Option A: Deploy via Azure Portal
+
+<Steps>
+  <Step title="Navigate to App Service">
+    1. Open the [Azure Portal](https://portal.azure.com)
+    2. Navigate to your App Service resource
+    3. Select **Deployment** → **Deployment Center**
+  </Step>
+
+  <Step title="Configure container settings">
+    Configure the following settings:
+
+    | Setting | Value |
+    |---------|-------|
+    | **Image Source** | Azure Container Registry |
+    | **Registry** | Select your ACR (e.g., `ageverificationdev`) |
+    | **Image** | Select repository (e.g., `verifier-endpoint`) |
+    | **Tag** | Select tag (e.g., `latest` or `v1.0.0`) |
+    | **Continuous Deployment** | On (optional) |
+  </Step>
+
+  <Step title="Configure application settings">
+    Navigate to **Configuration** → **Application settings** and add:
+
+    ```
+    VERIFIER_PUBLICURL=https://your-app.azurewebsites.net
+    VERIFIER_RESPONSE_MODE=DirectPostJwt
+    SERVER_PORT=8080
+    WEBSITES_PORT=8080
+    ```
+  </Step>
+
+  <Step title="Save and deploy">
+    1. Click **Save** in the Deployment Center
+    2. App Service will automatically pull and deploy the container
+    3. Monitor deployment in the **Logs** section
+  </Step>
+</Steps>
+
+### Option B: Deploy via Azure CLI
+
+<Steps>
+  <Step title="Create App Service Plan">
+    ```bash
+    az appservice plan create \
+      --name verifier-plan \
+      --resource-group YOUR_RESOURCE_GROUP \
+      --is-linux \
+      --sku P1V3
+    ```
+  </Step>
+
+  <Step title="Create Web App">
+    ```bash
+    az webapp create \
+      --resource-group YOUR_RESOURCE_GROUP \
+      --plan verifier-plan \
+      --name verifier-endpoint-app \
+      --deployment-container-image-name YOUR_REGISTRY.azurecr.io/verifier-endpoint:latest
+    ```
+  </Step>
+
+  <Step title="Configure registry credentials">
+    ```bash
+    az webapp config container set \
+      --name verifier-endpoint-app \
+      --resource-group YOUR_RESOURCE_GROUP \
+      --docker-custom-image-name YOUR_REGISTRY.azurecr.io/verifier-endpoint:latest \
+      --docker-registry-server-url https://YOUR_REGISTRY.azurecr.io \
+      --docker-registry-server-user $(az acr credential show --name YOUR_REGISTRY_NAME --query username -o tsv) \
+      --docker-registry-server-password $(az acr credential show --name YOUR_REGISTRY_NAME --query passwords[0].value -o tsv)
+    ```
+  </Step>
+
+  <Step title="Configure application settings">
+    ```bash
+    az webapp config appsettings set \
+      --resource-group YOUR_RESOURCE_GROUP \
+      --name verifier-endpoint-app \
+      --settings \
+        VERIFIER_PUBLICURL="https://verifier-endpoint-app.azurewebsites.net" \
+        VERIFIER_RESPONSE_MODE="DirectPostJwt" \
+        SERVER_PORT="8080" \
+        WEBSITES_PORT="8080"
+    ```
+  </Step>
+
+  <Step title="Enable continuous deployment (optional)">
+    ```bash
+    az webapp deployment container config \
+      --enable-cd true \
+      --name verifier-endpoint-app \
+      --resource-group YOUR_RESOURCE_GROUP
+    ```
+  </Step>
+</Steps>
+
+## Azure-Specific Configuration
+
+### Required App Settings
+
+<ParamField path="WEBSITES_PORT" type="number" required>
+  Port that Azure should forward traffic to
+  
+  **Value:** `8080` (must match `SERVER_PORT`)
+</ParamField>
+
+<ParamField path="VERIFIER_PUBLICURL" type="string" required>
+  Public URL of your App Service
+  
+  **Example:** `https://your-app.azurewebsites.net`
+</ParamField>
+
+<ParamField path="WEBSITES_ENABLE_APP_SERVICE_STORAGE" type="boolean" default="false">
+  Enable persistent storage (set to `false` for containers)
+</ParamField>
+
+<ParamField path="DOCKER_REGISTRY_SERVER_URL" type="string">
+  Azure Container Registry URL
+  
+  **Example:** `https://ageverificationdev.azurecr.io`
+</ParamField>
+
+### Environment Variables
+
+Set verifier-specific environment variables:
+
+```bash
+az webapp config appsettings set \
+  --resource-group YOUR_RESOURCE_GROUP \
+  --name verifier-endpoint-app \
+  --settings \
+    VERIFIER_PUBLICURL="https://your-app.azurewebsites.net" \
+    VERIFIER_RESPONSE_MODE="DirectPostJwt" \
+    VERIFIER_REQUESTJWT_EMBED="ByReference" \
+    VERIFIER_JAR_SIGNING_KEY="GenerateRandom" \
+    VERIFIER_JAR_SIGNING_ALGORITHM="ES256" \
+    VERIFIER_MAXAGE="PT30M" \
+    CORS_ORIGINS="https://your-frontend.azurewebsites.net" \
+    SERVER_PORT="8080" \
+    WEBSITES_PORT="8080"
+```
+
+### Using Azure Key Vault
+
+For sensitive configuration:
+
+<Steps>
+  <Step title="Create Key Vault secret">
+    ```bash
+    az keyvault secret set \
+      --vault-name YOUR_KEY_VAULT \
+      --name verifier-keystore-password \
+      --value "your-secret-password"
+    ```
+  </Step>
+
+  <Step title="Enable managed identity">
+    ```bash
+    az webapp identity assign \
+      --name verifier-endpoint-app \
+      --resource-group YOUR_RESOURCE_GROUP
+    ```
+  </Step>
+
+  <Step title="Grant Key Vault access">
+    ```bash
+    az keyvault set-policy \
+      --name YOUR_KEY_VAULT \
+      --object-id $(az webapp identity show --name verifier-endpoint-app --resource-group YOUR_RESOURCE_GROUP --query principalId -o tsv) \
+      --secret-permissions get list
+    ```
+  </Step>
+
+  <Step title="Reference secret in app settings">
+    ```bash
+    az webapp config appsettings set \
+      --resource-group YOUR_RESOURCE_GROUP \
+      --name verifier-endpoint-app \
+      --settings \
+        VERIFIER_JAR_SIGNING_KEY_KEYSTORE_PASSWORD="@Microsoft.KeyVault(SecretUri=https://YOUR_KEY_VAULT.vault.azure.net/secrets/verifier-keystore-password/)"
+    ```
+  </Step>
+</Steps>
+
+## Scaling Configuration
+
+### Manual Scaling
+
+```bash
+az appservice plan update \
+  --name verifier-plan \
+  --resource-group YOUR_RESOURCE_GROUP \
+  --number-of-workers 3
+```
+
+### Auto-Scaling
+
+<Steps>
+  <Step title="Enable auto-scale">
+    ```bash
+    az monitor autoscale create \
+      --resource-group YOUR_RESOURCE_GROUP \
+      --resource verifier-endpoint-app \
+      --resource-type Microsoft.Web/sites \
+      --name verifier-autoscale \
+      --min-count 2 \
+      --max-count 10 \
+      --count 2
+    ```
+  </Step>
+
+  <Step title="Add CPU-based rule">
+    ```bash
+    az monitor autoscale rule create \
+      --resource-group YOUR_RESOURCE_GROUP \
+      --autoscale-name verifier-autoscale \
+      --condition "Percentage CPU > 70 avg 5m" \
+      --scale out 1
+    ```
+  </Step>
+
+  <Step title="Add scale-down rule">
+    ```bash
+    az monitor autoscale rule create \
+      --resource-group YOUR_RESOURCE_GROUP \
+      --autoscale-name verifier-autoscale \
+      --condition "Percentage CPU < 30 avg 5m" \
+      --scale in 1
+    ```
+  </Step>
+</Steps>
+
+## Monitoring and Logging
+
+### View Application Logs
+
+<CodeGroup>
+```bash Enable Logging
+az webapp log config \
+  --name verifier-endpoint-app \
+  --resource-group YOUR_RESOURCE_GROUP \
+  --docker-container-logging filesystem
+```
+
+```bash Stream Logs
+az webapp log tail \
+  --name verifier-endpoint-app \
+  --resource-group YOUR_RESOURCE_GROUP
+```
+
+```bash Download Logs
+az webapp log download \
+  --name verifier-endpoint-app \
+  --resource-group YOUR_RESOURCE_GROUP \
+  --log-file logs.zip
+```
+</CodeGroup>
+
+### Application Insights Integration
+
+```bash
+# Create Application Insights instance
+az monitor app-insights component create \
+  --app verifier-insights \
+  --location eastus \
+  --resource-group YOUR_RESOURCE_GROUP
+
+# Get instrumentation key
+INSTRUMENTATION_KEY=$(az monitor app-insights component show \
+  --app verifier-insights \
+  --resource-group YOUR_RESOURCE_GROUP \
+  --query instrumentationKey -o tsv)
+
+# Configure app to use Application Insights
+az webapp config appsettings set \
+  --resource-group YOUR_RESOURCE_GROUP \
+  --name verifier-endpoint-app \
+  --settings \
+    APPINSIGHTS_INSTRUMENTATIONKEY="$INSTRUMENTATION_KEY" \
+    APPLICATIONINSIGHTS_CONNECTION_STRING="InstrumentationKey=$INSTRUMENTATION_KEY"
+```
+
+## Health Checks
+
+Configure health check endpoint:
+
+```bash
+az webapp config set \
+  --resource-group YOUR_RESOURCE_GROUP \
+  --name verifier-endpoint-app \
+  --health-check-path "/actuator/health"
+```
+
+## Custom Domain and SSL
+
+<Steps>
+  <Step title="Add custom domain">
+    ```bash
+    az webapp config hostname add \
+      --webapp-name verifier-endpoint-app \
+      --resource-group YOUR_RESOURCE_GROUP \
+      --hostname verifier.yourdomain.com
+    ```
+  </Step>
+
+  <Step title="Bind SSL certificate">
+    ```bash
+    az webapp config ssl bind \
+      --name verifier-endpoint-app \
+      --resource-group YOUR_RESOURCE_GROUP \
+      --certificate-thumbprint YOUR_CERT_THUMBPRINT \
+      --ssl-type SNI
+    ```
+  </Step>
+
+  <Step title="Update VERIFIER_PUBLICURL">
+    ```bash
+    az webapp config appsettings set \
+      --resource-group YOUR_RESOURCE_GROUP \
+      --name verifier-endpoint-app \
+      --settings \
+        VERIFIER_PUBLICURL="https://verifier.yourdomain.com"
+    ```
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Container fails to start">
+    Check container logs:
+    
+    ```bash
+    az webapp log tail --name verifier-endpoint-app --resource-group YOUR_RESOURCE_GROUP
+    ```
+    
+    Verify `WEBSITES_PORT` matches `SERVER_PORT`:
+    
+    ```bash
+    az webapp config appsettings list \
+      --name verifier-endpoint-app \
+      --resource-group YOUR_RESOURCE_GROUP \
+      --query "[?name=='WEBSITES_PORT' || name=='SERVER_PORT']"
+    ```
+  </Accordion>
+
+  <Accordion title="Cannot pull image from ACR">
+    Verify registry credentials:
+    
+    ```bash
+    az webapp config container show \
+      --name verifier-endpoint-app \
+      --resource-group YOUR_RESOURCE_GROUP
+    ```
+    
+    Re-configure registry access:
+    
+    ```bash
+    az webapp config container set \
+      --name verifier-endpoint-app \
+      --resource-group YOUR_RESOURCE_GROUP \
+      --docker-registry-server-url https://YOUR_REGISTRY.azurecr.io
+    ```
+  </Accordion>
+
+  <Accordion title="Application not responding">
+    Check application health:
+    
+    ```bash
+    # Test health endpoint
+    curl https://your-app.azurewebsites.net/actuator/health
+    
+    # Check app service status
+    az webapp show \
+      --name verifier-endpoint-app \
+      --resource-group YOUR_RESOURCE_GROUP \
+      --query state
+    ```
+  </Accordion>
+
+  <Accordion title="Deployment takes too long">
+    Monitor deployment progress:
+    
+    ```bash
+    az webapp log deployment list \
+      --name verifier-endpoint-app \
+      --resource-group YOUR_RESOURCE_GROUP
+    ```
+    
+    Restart the app service:
+    
+    ```bash
+    az webapp restart \
+      --name verifier-endpoint-app \
+      --resource-group YOUR_RESOURCE_GROUP
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use Managed Identity" icon="shield">
+    Enable managed identity for secure access to Azure resources without storing credentials.
+  </Card>
+
+  <Card title="Implement Health Checks" icon="heart-pulse">
+    Configure health check endpoints to enable automatic recovery.
+  </Card>
+
+  <Card title="Enable Application Insights" icon="chart-line">
+    Use Application Insights for comprehensive monitoring and diagnostics.
+  </Card>
+
+  <Card title="Use Deployment Slots" icon="server">
+    Deploy to staging slots first, then swap to production for zero-downtime deployments.
+  </Card>
+
+  <Card title="Tag Images with Versions" icon="tag">
+    Use semantic versioning for images instead of relying on `latest`.
+  </Card>
+
+  <Card title="Secure Secrets" icon="key">
+    Store sensitive configuration in Azure Key Vault, not in application settings.
+  </Card>
+</CardGroup>
+
+## Continuous Deployment
+
+For automated deployments, enable webhook from ACR:
+
+```bash
+# Get webhook URL
+WEBHOOK_URL=$(az webapp deployment container show-cd-url \
+  --name verifier-endpoint-app \
+  --resource-group YOUR_RESOURCE_GROUP \
+  --query CI_CD_URL -o tsv)
+
+# Create ACR webhook
+az acr webhook create \
+  --registry YOUR_REGISTRY_NAME \
+  --name verifierWebhook \
+  --actions push \
+  --uri $WEBHOOK_URL \
+  --scope verifier-endpoint:latest
+```
+
+Now, whenever you push a new image with the `latest` tag, Azure App Service will automatically pull and deploy it.
+
+## Next Steps
+
+- Configure [Environment Variables](/configuration/environment-variables) for production
+- Set up [Monitoring and Alerts](/operations/monitoring)
+- Review [Security Best Practices](/security/overview)
+- Explore [API Documentation](/api-reference/verifier-api)

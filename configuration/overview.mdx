@@ -1,0 +1,170 @@
+---
+title: 'Configuration Overview'
+description: 'Overview of EUDI Verifier Endpoint configuration options'
+---
+
+The EUDI Verifier Endpoint application is configured entirely through environment variables. This provides flexibility for deployment across different environments and containerized setups.
+
+## Configuration Categories
+
+The verifier endpoint supports configuration in the following areas:
+
+<CardGroup cols={2}>
+  <Card title="JAR Signing" icon="signature" href="/configuration/jar-signing">
+    Configure how authorization requests are signed
+  </Card>
+  <Card title="Trust Sources" icon="shield-check" href="/configuration/trust-sources">
+    Configure trust sources for credential validation
+  </Card>
+  <Card title="Response Encryption" icon="lock" href="/configuration/response-encryption">
+    Configure encryption for authorization responses
+  </Card>
+  <Card title="Credential Formats" icon="id-card" href="/configuration/credential-formats">
+    Configure supported credential formats
+  </Card>
+  <Card title="CORS" icon="globe" href="/configuration/cors">
+    Configure cross-origin resource sharing
+  </Card>
+  <Card title="Proxy" icon="network-wired" href="/configuration/proxy">
+    Configure HTTP proxy settings
+  </Card>
+</CardGroup>
+
+## Basic Configuration
+
+Here's a minimal configuration example:
+
+```bash
+# Server Configuration
+SERVER_PORT=8080
+SPRING_WEBFLUX_BASEPATH=/
+
+# Verifier Identity
+VERIFIER_PUBLICURL=https://verifier.example.com
+VERIFIER_ORIGINALCLIENTID=Verifier
+VERIFIER_CLIENTIDPREFIX=pre-registered
+
+# JAR Signing
+VERIFIER_JAR_SIGNING_ALGORITHM=ES256
+VERIFIER_JAR_SIGNING_KEY=GenerateRandom
+
+# Request/Response Configuration
+VERIFIER_REQUESTJWT_EMBED=ByReference
+VERIFIER_REQUESTJWT_REQUESTURIMETHOD=Get
+VERIFIER_RESPONSE_MODE=DirectPostJwt
+```
+
+## Docker Compose Configuration
+
+When using Docker Compose, set environment variables in the `docker-compose.yaml` file:
+
+```yaml
+verifier:
+  image: ghcr.io/eu-digital-identity-wallet/eudi-srv-web-verifier-endpoint-23220-4-kt:latest
+  container_name: verifier-backend
+  ports:
+    - "8080:8080"
+  environment:
+    VERIFIER_PUBLICURL: "https://10.240.174.10"
+    VERIFIER_RESPONSE_MODE: "DirectPost"
+    VERIFIER_JAR_SIGNING_KEY: "LoadFromKeystore"
+    VERIFIER_JAR_SIGNING_KEY_KEYSTORE: file:///certs/keystore.jks
+  volumes:
+    - ./keystore.jks:/certs/keystore.jks
+```
+
+## Server Configuration
+
+<ParamField path="SPRING_PROFILES_ACTIVE" type="string">
+  Comma separated list of Spring Profiles to activate.
+  
+  Available profiles:
+  - `self-signed`: Configures a Ktor HttpClient that trusts self-signed certificates and performs no hostname verification
+</ParamField>
+
+<ParamField path="SPRING_WEBFLUX_BASEPATH" type="string" default="/">
+  Context path for the Verifier Endpoint application.
+</ParamField>
+
+<ParamField path="SERVER_PORT" type="integer" default="8080">
+  Port for the HTTP listener of the Verifier Endpoint application.
+</ParamField>
+
+## Verifier Identity
+
+<ParamField path="VERIFIER_ORIGINALCLIENTID" type="string" default="Verifier">
+  Client Id of the Verifier Endpoint application **without** the Client Id prefix.
+</ParamField>
+
+<ParamField path="VERIFIER_CLIENTIDPREFIX" type="string" default="pre-registered">
+  Client Id Prefix used by the Verifier Endpoint application.
+  
+  Possible values: `pre-registered`, `x509_san_dns`, `x509_hash`
+</ParamField>
+
+<ParamField path="VERIFIER_PUBLICURL" type="string" default="http://localhost:${SERVER_PORT}">
+  Public URL of the Verifier Endpoint application.
+</ParamField>
+
+## Request Configuration
+
+<ParamField path="VERIFIER_REQUESTJWT_EMBED" type="string" default="ByReference">
+  How Authorization Requests will be provided.
+  
+  Possible values: `ByValue`, `ByReference`
+</ParamField>
+
+<ParamField path="VERIFIER_REQUESTJWT_REQUESTURIMETHOD" type="string" default="Get">
+  Default `request_uri_method` to use for a Presentation when one is not provided during its initialization. Applicable when `VERIFIER_REQUESTJWT_EMBED` is `ByReference`.
+  
+  Possible values: `Get`, `Post`
+</ParamField>
+
+<ParamField path="VERIFIER_RESPONSE_MODE" type="string" default="DirectPostJwt">
+  How Authorization Responses are expected.
+  
+  Possible values: `DirectPost`, `DirectPostJwt`
+</ParamField>
+
+<ParamField path="VERIFIER_AUTHORIZATIONREQUESTSCHEME" type="string" default="eudi-openid4vp">
+  The Authorization Request Scheme to be used for the QR code generation process.
+</ParamField>
+
+<ParamField path="VERIFIER_ALLOWEDREDIRECTURISCHEMES" type="string" default="https">
+  Comma-separated list of schemes allowed to be used in the `wallet_response_redirect_uri_template`.
+  
+  When Verifier Endpoint is used by a native mobile application, `wallet_response_redirect_uri_template` might contain a URI with a custom scheme (i.e., a deep-link). In such cases the custom scheme must be added to this variable.
+</ParamField>
+
+## Lifecycle Configuration
+
+<ParamField path="VERIFIER_MAXAGE" type="duration" default="PT6400M">
+  TTL of an Authorization Request.
+  
+  Provide a value using Java Duration syntax (e.g., `PT6400M`).
+</ParamField>
+
+<ParamField path="VERIFIER_PRESENTATIONS_CLEANUP_MAXAGE" type="duration" default="P10D">
+  Age of Authorization Requests. Authorization Requests older than this are deleted.
+  
+  Provide a value using Java Duration syntax (e.g., `P10D`).
+</ParamField>
+
+## Transaction Data
+
+<ParamField path="VERIFIER_TRANSACTIONDATA_HASHALGORITHM" type="string" default="sha-256">
+  Hash algorithm to communicate in the `transaction_data_hashes_alg` claim of transaction data.
+  
+  Supported values: `sha-256`, `sha-384`, `sha-512`, `sha3-224`, `sha3-256`, `sha3-384`, `sha3-512`
+</ParamField>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="JAR Signing Configuration" icon="signature" href="/configuration/jar-signing">
+    Learn how to configure authorization request signing
+  </Card>
+  <Card title="Trust Sources" icon="shield-check" href="/configuration/trust-sources">
+    Set up trust sources for credential validation
+  </Card>
+</CardGroup>

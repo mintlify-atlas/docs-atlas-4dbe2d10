@@ -1,0 +1,227 @@
+---
+title: "Get Wallet Response"
+description: "Retrieve the wallet's authorization response for a presentation transaction"
+---
+
+## Endpoint
+
+```
+GET /ui/presentations/{transactionId}
+```
+
+This endpoint allows the verifier application to retrieve the wallet's authorization response after the wallet has submitted its credentials. Use this endpoint to fetch the verified presentation data.
+
+## Path Parameters
+
+<ParamField path="transactionId" type="string" required>
+  The unique identifier of the presentation transaction, obtained from the [Initialize Transaction](/api/verifier/initialize-transaction) endpoint response.
+</ParamField>
+
+## Query Parameters
+
+<ParamField query="response_code" type="string">
+  Response code generated in the same-device presentation flow. This code is returned to the wallet in the redirect response and must be provided here to retrieve the presentation.
+  
+  **When to use:**
+  - Required in same-device flows where the wallet and verifier UI run on the same device
+  - Not required in cross-device flows (QR code scanning)
+</ParamField>
+
+## Response
+
+The response contains the wallet's submitted authorization response, including the requested verifiable presentations and trust information.
+
+<ResponseField name="vp_token" type="object">
+  The verifiable presentation token containing the requested credentials. The structure is a JSON object where keys are credential query IDs and values are arrays of presentations.
+  
+  Each presentation can be:
+  - A JSON object (for SD-JWT VC or JSON-based formats)
+  - A string (for other credential formats)
+  
+  <Expandable title="Example vp_token structure">
+    ```json
+    {
+      "32f54163-7166-48f1-93d8-ff217bdb0653": [
+        {
+          "id": "123456",
+          "family_name": "Doe",
+          "given_name": "John"
+        }
+      ]
+    }
+    ```
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="trust_info" type="array">
+  Array of trust validation results for each presented credential. Contains information about issuer trust and signature validation.
+  
+  <Expandable title="Trust Info Fields">
+    <ResponseField name="issuer_in_trusted_list" type="boolean">
+      Whether the credential issuer is found in the configured trust lists.
+    </ResponseField>
+    
+    <ResponseField name="issuer_not_expired" type="boolean">
+      Whether the issuer's certificate is still valid (not expired).
+    </ResponseField>
+    
+    <ResponseField name="signature_valid" type="boolean">
+      Whether the credential's cryptographic signature is valid.
+    </ResponseField>
+    
+    <ResponseField name="validation_errors" type="array">
+      Array of error messages if any validation checks failed. Empty if all validations passed.
+    </ResponseField>
+    
+    <ResponseField name="is_fully_trusted" type="boolean">
+      Overall trust status. `true` if all trust checks passed, `false` otherwise.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error code if the wallet returned an error instead of a successful presentation. Present only when the wallet authorization failed.
+</ResponseField>
+
+<ResponseField name="error_description" type="string">
+  Human-readable description of the error. Present only when `error` is present.
+</ResponseField>
+
+## Response Status Codes
+
+<ResponseField name="200" type="status">
+  **OK** - Wallet response found and returned successfully.
+</ResponseField>
+
+<ResponseField name="404" type="status">
+  **Not Found** - No transaction found with the specified `transactionId`, or the wallet has not yet submitted a response.
+</ResponseField>
+
+<ResponseField name="400" type="status">
+  **Bad Request** - Invalid state for this transaction (e.g., wrong `response_code` provided or transaction is in an invalid state).
+</ResponseField>
+
+## Examples
+
+### Cross-Device Flow (No Response Code)
+
+```bash
+curl http://localhost:8080/ui/presentations/5N6E7VZsmwXOGLz1Xlfi96MoyZVC3FZxwdAuJ26DnGcan-vYs-VAKErioQ58BWEsKlVw2_X49jpZHyp0Mk9nKw
+```
+
+<ResponseExample>
+```json
+{
+  "vp_token": {
+    "32f54163-7166-48f1-93d8-ff217bdb0653": [
+      {
+        "family_name": "Doe",
+        "given_name": "John",
+        "birth_date": "1990-01-01",
+        "age_over_18": true
+      }
+    ]
+  },
+  "trust_info": [
+    {
+      "issuer_in_trusted_list": true,
+      "issuer_not_expired": true,
+      "signature_valid": true,
+      "validation_errors": [],
+      "is_fully_trusted": true
+    }
+  ]
+}
+```
+</ResponseExample>
+
+### Same-Device Flow (With Response Code)
+
+```bash
+curl http://localhost:8080/ui/presentations/5N6E7VZsmwXOGLz1Xlfi96MoyZVC3FZxwdAuJ26DnGcan-vYs-VAKErioQ58BWEsKlVw2_X49jpZHyp0Mk9nKw?response_code=5272d373-ebab-40ec-b44d-0a9909d0da69
+```
+
+<ResponseExample>
+```json
+{
+  "vp_token": {
+    "32f54163-7166-48f1-93d8-ff217bdb0653": [
+      {
+        "family_name": "Smith",
+        "given_name": "Jane"
+      }
+    ]
+  },
+  "trust_info": [
+    {
+      "issuer_in_trusted_list": true,
+      "issuer_not_expired": true,
+      "signature_valid": true,
+      "validation_errors": [],
+      "is_fully_trusted": true
+    }
+  ]
+}
+```
+</ResponseExample>
+
+### Error Response (Wallet Denied)
+
+<ResponseExample>
+```json
+{
+  "error": "access_denied",
+  "error_description": "User denied the authorization request"
+}
+```
+</ResponseExample>
+
+### Transaction Not Found
+
+<ResponseExample>
+```json Status 404
+{
+  "error": "not_found",
+  "message": "No transaction found with the specified ID"
+}
+```
+</ResponseExample>
+
+## Integration Flow
+
+1. **Initialize Transaction** - Create a presentation request using [Initialize Transaction](/api/verifier/initialize-transaction)
+2. **Present to Wallet** - Display QR code or redirect to wallet (depending on flow)
+3. **Poll for Response** - Periodically call this endpoint to check if the wallet has responded
+4. **Process Response** - When response is received (status 200), validate the `vp_token` and `trust_info`
+
+<Note>
+In production, consider implementing webhooks or server-sent events for real-time notification of wallet responses instead of polling.
+</Note>
+
+## Trust Validation
+
+The `trust_info` array provides detailed validation results for each credential:
+
+- **Issuer Validation** - Checks if the issuer's certificate is in the configured trust lists
+- **Expiration Validation** - Verifies the issuer's certificate is not expired
+- **Signature Validation** - Validates the cryptographic signature of the credential
+- **Overall Trust** - `is_fully_trusted` is `true` only if all checks pass
+
+Always check `is_fully_trusted` before accepting credentials in production systems. Review `validation_errors` if any trust check fails.
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Initialize Transaction" icon="play" href="/api/verifier/initialize-transaction">
+    Create a new presentation transaction
+  </Card>
+  <Card title="Get Presentation Events" icon="list" href="/api/verifier/get-presentation-events">
+    View the event log for debugging
+  </Card>
+</CardGroup>
+
+## See Also
+
+- [Trust Sources](/configuration/trust-sources) - Configure issuer trust validation
+- [Presentation Flows](/concepts/presentation-flows) - Understand same-device vs cross-device
+- Source: [VerifierApi.kt:86-98](https://github.com/eu-digital-identity-wallet/av-srv-web-verifier-endpoint-23220-4-kt/blob/main/src/main/kotlin/eu/europa/ec/eudi/verifier/endpoint/adapter/input/web/VerifierApi.kt#L86-L98)

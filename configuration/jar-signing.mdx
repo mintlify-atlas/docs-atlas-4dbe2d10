@@ -1,0 +1,202 @@
+---
+title: 'JAR Signing Configuration'
+description: 'Configure signing keys and algorithms for JWT Authorization Requests'
+---
+
+The EUDI Verifier Endpoint signs authorization requests as JWTs (JWT-Secured Authorization Request or JAR). This page explains how to configure the signing algorithm and key.
+
+## Signing Algorithm
+
+<ParamField path="VERIFIER_JAR_SIGNING_ALGORITHM" type="string" default="ES256" required>
+  Algorithm used to sign Authorization Request.
+  
+  **Possible values:** Any `Algorithm Name` of an IANA registered asymmetric signature algorithm (i.e. Usage is `alg`): https://www.iana.org/assignments/jose/jose.xhtml#web-signature-encryption-algorithms
+  
+  **Note:** The configured signing algorithm must be compatible with the configured signing key.
+  
+  Common values:
+  - `ES256` - ECDSA using P-256 and SHA-256 (default)
+  - `ES384` - ECDSA using P-384 and SHA-384
+  - `ES512` - ECDSA using P-521 and SHA-512
+  - `RS256` - RSASSA-PKCS1-v1_5 using SHA-256
+  - `PS256` - RSASSA-PSS using SHA-256
+</ParamField>
+
+## Signing Key Configuration
+
+<ParamField path="VERIFIER_JAR_SIGNING_KEY" type="string" default="GenerateRandom" required>
+  Key to use for Authorization Request signing.
+  
+  **Possible values:**
+  - `GenerateRandom` - Generate a random EC key using the curve P-256
+  - `LoadFromKeystore` - Load a key from a configured keystore
+  
+  **Note:** The configured signing key must be compatible with the configured signing algorithm.
+</ParamField>
+
+## Configuration Examples
+
+### Using a Random Generated Key
+
+The simplest configuration generates a random key on startup:
+
+```bash
+VERIFIER_JAR_SIGNING_ALGORITHM=ES256
+VERIFIER_JAR_SIGNING_KEY=GenerateRandom
+```
+
+<Warning>
+  Using `GenerateRandom` means the signing key changes on each restart. This is suitable for development but not recommended for production environments where consistency is needed.
+</Warning>
+
+### Loading a Key from Keystore
+
+For production environments, load a key from a keystore:
+
+```bash
+VERIFIER_JAR_SIGNING_ALGORITHM=ES256
+VERIFIER_JAR_SIGNING_KEY=LoadFromKeystore
+VERIFIER_JAR_SIGNING_KEY_KEYSTORE=file:///certs/keystore.jks
+VERIFIER_JAR_SIGNING_KEY_KEYSTORE_TYPE=jks
+VERIFIER_JAR_SIGNING_KEY_KEYSTORE_PASSWORD=keystorePassword
+VERIFIER_JAR_SIGNING_KEY_ALIAS=verifierKey
+VERIFIER_JAR_SIGNING_KEY_PASSWORD=keyPassword
+```
+
+## Keystore Configuration
+
+<Info>
+  The following environment variables are **required** when `VERIFIER_JAR_SIGNING_KEY` is set to `LoadFromKeystore`.
+</Info>
+
+<ParamField path="VERIFIER_JAR_SIGNING_KEY_KEYSTORE" type="string" required>
+  URL of the Keystore from which to load the Key to use for JAR signing.
+  
+  Examples:
+  - `classpath:keystore.jks` - Load from application classpath
+  - `file:///keystore.jks` - Load from filesystem
+  - `file:///certs/keystore.jks` - Load from specific directory
+</ParamField>
+
+<ParamField path="VERIFIER_JAR_SIGNING_KEY_KEYSTORE_TYPE" type="string" required>
+  Type of the Keystore from which to load the Key to use for JAR signing.
+  
+  Examples:
+  - `jks` - Java KeyStore format
+  - `pkcs12` - PKCS#12 format (recommended)
+</ParamField>
+
+<ParamField path="VERIFIER_JAR_SIGNING_KEY_KEYSTORE_PASSWORD" type="string" required>
+  Password of the Keystore from which to load the Key to use for JAR signing.
+</ParamField>
+
+<ParamField path="VERIFIER_JAR_SIGNING_KEY_ALIAS" type="string" required>
+  Alias of the Key to use for JAR signing, in the configured Keystore.
+</ParamField>
+
+<ParamField path="VERIFIER_JAR_SIGNING_KEY_PASSWORD" type="string" required>
+  Password of the Key to use for JAR signing, in the configured Keystore.
+</ParamField>
+
+## Docker Compose with External Keystore
+
+When using Docker Compose, mount an external keystore as a volume:
+
+```yaml
+verifier:
+  image: ghcr.io/eu-digital-identity-wallet/eudi-srv-web-verifier-endpoint-23220-4-kt:latest
+  container_name: verifier-backend
+  ports:
+    - "8080:8080"
+  environment:
+    VERIFIER_PUBLICURL: "https://10.240.174.10"
+    VERIFIER_RESPONSE_MODE: "DirectPost"
+    VERIFIER_JAR_SIGNING_KEY: "LoadFromKeystore"
+    VERIFIER_JAR_SIGNING_KEY_KEYSTORE: file:///certs/keystore.jks
+    VERIFIER_JAR_SIGNING_KEY_KEYSTORE_TYPE: jks
+    VERIFIER_JAR_SIGNING_KEY_KEYSTORE_PASSWORD: keystorePassword
+    VERIFIER_JAR_SIGNING_KEY_ALIAS: verifierKey
+    VERIFIER_JAR_SIGNING_KEY_PASSWORD: keyPassword
+  volumes:
+    - /path/on/host/keystore.jks:/certs/keystore.jks:ro
+```
+
+<Tip>
+  Mount the keystore as read-only (`:ro`) for additional security.
+</Tip>
+
+## Generating a Keystore
+
+### Create a PKCS#12 Keystore with EC Key
+
+```bash
+# Generate a P-256 EC key pair
+keytool -genkeypair \
+  -alias verifierKey \
+  -keyalg EC \
+  -keysize 256 \
+  -sigalg SHA256withECDSA \
+  -keystore keystore.p12 \
+  -storetype PKCS12 \
+  -storepass keystorePassword \
+  -keypass keyPassword \
+  -dname "CN=Verifier, O=Organization, C=US" \
+  -validity 3650
+```
+
+### Create a PKCS#12 Keystore with RSA Key
+
+```bash
+# Generate a 2048-bit RSA key pair
+keytool -genkeypair \
+  -alias verifierKey \
+  -keyalg RSA \
+  -keysize 2048 \
+  -sigalg SHA256withRSA \
+  -keystore keystore.p12 \
+  -storetype PKCS12 \
+  -storepass keystorePassword \
+  -keypass keyPassword \
+  -dname "CN=Verifier, O=Organization, C=US" \
+  -validity 3650
+```
+
+## Algorithm and Key Compatibility
+
+Ensure your signing algorithm and key type are compatible:
+
+| Algorithm | Key Type | Curve/Size |
+|-----------|----------|------------|
+| ES256 | EC | P-256 |
+| ES384 | EC | P-384 |
+| ES512 | EC | P-521 |
+| RS256 | RSA | 2048+ bits |
+| RS384 | RSA | 2048+ bits |
+| RS512 | RSA | 2048+ bits |
+| PS256 | RSA | 2048+ bits |
+| PS384 | RSA | 2048+ bits |
+| PS512 | RSA | 2048+ bits |
+
+## Security Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Strong Algorithms">
+    Use ES256 or stronger algorithms. Avoid deprecated algorithms like RS256 with small key sizes.
+  </Accordion>
+  
+  <Accordion title="Protect Keystore Passwords">
+    Store keystore passwords securely using environment variables, secrets management systems, or encrypted configuration.
+  </Accordion>
+  
+  <Accordion title="Use PKCS#12 Format">
+    Prefer PKCS#12 (`.p12` or `.pfx`) over JKS format for better interoperability and security.
+  </Accordion>
+  
+  <Accordion title="Rotate Keys Regularly">
+    Implement a key rotation policy and update keystores periodically.
+  </Accordion>
+  
+  <Accordion title="Restrict File Permissions">
+    Ensure keystore files have restricted permissions (e.g., `chmod 600` on Unix systems).
+  </Accordion>
+</AccordionGroup>

@@ -1,0 +1,130 @@
+---
+title: 'POST Request Object'
+description: 'Retrieve the authorization request object using POST method with wallet metadata'
+---
+
+## Overview
+
+This endpoint allows the wallet to retrieve the OpenID4VP authorization request object using the `request_uri_method: post` approach. This method enables the wallet to provide additional metadata and a nonce value, allowing the verifier to encrypt the response JWT specifically for the wallet.
+
+For more details, see the [OpenID4VP specification](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#name-request-uri-method-post).
+
+## Endpoint
+
+```
+POST /wallet/request.jwt/{requestId}
+```
+
+## Path Parameters
+
+<ParamField path="requestId" type="string" required>
+  The unique identifier of the authorization request. This value is extracted from the `request_uri` provided by the verifier.
+</ParamField>
+
+## Request Body
+
+**Content-Type:** `application/x-www-form-urlencoded`
+
+<ParamField body="wallet_metadata" type="string" required>
+  A JSON string containing metadata parameters of the wallet, including supported encryption algorithms and public keys. This allows the verifier to encrypt the response JWT for the specific wallet.
+</ParamField>
+
+<ParamField body="wallet_nonce" type="string" required>
+  A unique string value used to mitigate replay attacks of the authorization request. This nonce should be cryptographically random.
+</ParamField>
+
+## Response
+
+The response is a signed JWT, or a signed and encrypted JWT (JWE) when wallet metadata is provided.
+
+**Content-Type:** `application/oauth-authz-req+jwt`
+
+### Response Fields
+
+The JWT payload contains the OpenID4VP authorization request with fields such as:
+
+<ResponseField name="client_id" type="string">
+  The client identifier of the verifier
+</ResponseField>
+
+<ResponseField name="response_type" type="string">
+  Always `vp_token` for OpenID4VP flows
+</ResponseField>
+
+<ResponseField name="response_mode" type="string">
+  Either `direct_post` or `direct_post.jwt`
+</ResponseField>
+
+<ResponseField name="state" type="string">
+  A unique state value that must be included in the wallet's response
+</ResponseField>
+
+<ResponseField name="nonce" type="string">
+  A unique nonce value to prevent replay attacks
+</ResponseField>
+
+<ResponseField name="wallet_nonce" type="string">
+  The wallet nonce echoed back from the request, ensuring freshness
+</ResponseField>
+
+<ResponseField name="presentation_definition" type="object">
+  The DCQL query defining which credentials are requested
+</ResponseField>
+
+<ResponseField name="response_uri" type="string">
+  The URL where the wallet should POST its response
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X POST https://localhost:8080/wallet/request.jwt/5N6E7VZsmwXOGLz1Xlfi96MoyZVC3FZxwdAuJ26DnGcan-vYs-VAKErioQ58BWEsKlVw2_X49jpZHyp0Mk9nKw \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "wallet_metadata={\"jwks\":{\"keys\":[{...}]}}" \
+  -d "wallet_nonce=unique-random-nonce-value"
+```
+
+## Example Response
+
+When `wallet_metadata` is provided, the response is typically encrypted:
+
+```
+eyJhbGciOiJFQ0RILUVTIiwiZW5jIjoiQTEyOEdDTSIsImVwayI6ey4uLn19.encrypted_key.iv.ciphertext.tag
+```
+
+The decrypted JWT payload contains the authorization request with the standard OpenID4VP fields.
+
+## Error Responses
+
+<ResponseField name="404 Not Found" type="error">
+  The request object with the specified `requestId` was not found or has expired
+</ResponseField>
+
+<ResponseField name="400 Bad Request" type="error">
+  The request is malformed, missing required parameters, or contains invalid wallet metadata
+</ResponseField>
+
+## Usage Flow
+
+1. Verifier initializes a transaction with `request_uri_method: post`
+2. Verifier presents the `request_uri` to the wallet (via QR code or deep link)
+3. Wallet extracts the `requestId` from the `request_uri`
+4. Wallet generates a random `wallet_nonce` and prepares its `wallet_metadata`
+5. Wallet calls this POST endpoint with the metadata and nonce
+6. Verifier encrypts the authorization request JWT using the wallet's public key
+7. Wallet decrypts and processes the JWT to determine which credentials to present
+
+## Benefits of POST Method
+
+- **Enhanced Security**: The authorization request can be encrypted specifically for the requesting wallet
+- **Replay Protection**: The `wallet_nonce` ensures the response is fresh and cannot be replayed
+- **Wallet-Specific Responses**: The verifier can tailor the response based on wallet capabilities
+
+## Related Endpoints
+
+- [GET Request Object](/api/wallet/get-request-object) - Simpler method using GET
+- [Direct Post](/api/wallet/direct-post) - Submit wallet response
+
+## Source Code Reference
+
+Implementation: `WalletApi.kt:69` (`handleRetrieveRequestObject`)

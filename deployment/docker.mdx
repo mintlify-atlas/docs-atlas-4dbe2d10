@@ -1,0 +1,271 @@
+---
+title: Docker Deployment
+description: Deploy the EUDI Verifier Endpoint using Docker
+---
+
+## Overview
+
+The EUDI Verifier Endpoint can be deployed as a standalone Docker container. This guide covers building the Docker image and running the container with proper configuration.
+
+## Prerequisites
+
+- Docker installed on your system
+- Java 17 or higher (for building)
+- Gradle (included via wrapper)
+
+## Building the Docker Image
+
+<Steps>
+  <Step title="Build with Gradle">
+    The project uses Spring Boot's built-in support for creating Docker images. Run the following command from the project root:
+
+    ```bash
+    ./gradlew bootBuildImage
+    ```
+
+    This command will:
+    - Compile the application
+    - Run tests
+    - Create an optimized Docker image
+    - Tag the image as `eudi-srv-web-verifier-endpoint-23220-4-kt:latest`
+  </Step>
+
+  <Step title="Verify the image">
+    Check that the image was created successfully:
+
+    ```bash
+    docker images | grep verifier
+    ```
+  </Step>
+</Steps>
+
+## Running the Container
+
+### Basic Container Deployment
+
+<CodeGroup>
+```bash Basic
+docker run -d \
+  --name verifier-backend \
+  -p 8080:8080 \
+  eudi-srv-web-verifier-endpoint-23220-4-kt:latest
+```
+
+```bash With Environment Variables
+docker run -d \
+  --name verifier-backend \
+  -p 8080:8080 \
+  -e VERIFIER_PUBLICURL="https://your-domain.com" \
+  -e VERIFIER_RESPONSE_MODE="DirectPost" \
+  -e SERVER_PORT="8080" \
+  eudi-srv-web-verifier-endpoint-23220-4-kt:latest
+```
+
+```bash Using Public Image
+docker run -d \
+  --name verifier-backend \
+  -p 8080:8080 \
+  ghcr.io/eu-digital-identity-wallet/eudi-srv-web-verifier-endpoint-23220-4-kt:latest
+```
+</CodeGroup>
+
+## Port Mappings
+
+The verifier endpoint exposes the following ports:
+
+| Container Port | Host Port | Description |
+|----------------|-----------|-------------|
+| 8080 | 8080 | HTTP API endpoint |
+
+You can map to different host ports as needed:
+
+```bash
+docker run -d -p 9090:8080 verifier-backend
+```
+
+## Volume Mounts
+
+### Mounting External Keystore
+
+When using `LoadFromKeystore` for JAR signing, mount your keystore file:
+
+```bash
+docker run -d \
+  --name verifier-backend \
+  -p 8080:8080 \
+  -v /path/to/keystore.jks:/certs/keystore.jks \
+  -e VERIFIER_JAR_SIGNING_KEY="LoadFromKeystore" \
+  -e VERIFIER_JAR_SIGNING_KEY_KEYSTORE="file:///certs/keystore.jks" \
+  -e VERIFIER_JAR_SIGNING_KEY_KEYSTORE_TYPE="jks" \
+  -e VERIFIER_JAR_SIGNING_KEY_KEYSTORE_PASSWORD="your-password" \
+  -e VERIFIER_JAR_SIGNING_KEY_ALIAS="your-key-alias" \
+  -e VERIFIER_JAR_SIGNING_KEY_PASSWORD="your-key-password" \
+  eudi-srv-web-verifier-endpoint-23220-4-kt:latest
+```
+
+<Note>
+  Replace `/path/to/keystore.jks` with the actual path to your keystore file on the host machine.
+</Note>
+
+## Essential Environment Variables
+
+### Required Configuration
+
+<ParamField path="VERIFIER_PUBLICURL" type="string" required>
+  Public URL where the verifier endpoint is accessible
+  
+  **Example:** `https://verifier.example.com`
+</ParamField>
+
+<ParamField path="SERVER_PORT" type="number" default="8080">
+  Port for the HTTP listener
+</ParamField>
+
+<ParamField path="VERIFIER_RESPONSE_MODE" type="string" default="DirectPostJwt">
+  How authorization responses are expected
+  
+  **Options:** `DirectPost`, `DirectPostJwt`
+</ParamField>
+
+### Security Configuration
+
+<ParamField path="VERIFIER_JAR_SIGNING_KEY" type="string" default="GenerateRandom">
+  Key to use for Authorization Request signing
+  
+  **Options:** `GenerateRandom`, `LoadFromKeystore`
+</ParamField>
+
+<ParamField path="VERIFIER_JAR_SIGNING_ALGORITHM" type="string" default="ES256">
+  Algorithm used to sign Authorization Request
+  
+  **Examples:** `ES256`, `ES384`, `ES512`, `RS256`
+</ParamField>
+
+### Request Configuration
+
+<ParamField path="VERIFIER_REQUESTJWT_EMBED" type="string" default="ByReference">
+  How Authorization Requests will be provided
+  
+  **Options:** `ByValue`, `ByReference`
+</ParamField>
+
+<ParamField path="VERIFIER_REQUESTJWT_REQUESTURIMETHOD" type="string" default="Get">
+  Default request_uri_method (when using ByReference)
+  
+  **Options:** `Get`, `Post`
+</ParamField>
+
+### CORS Configuration
+
+```bash
+docker run -d \
+  --name verifier-backend \
+  -p 8080:8080 \
+  -e CORS_ORIGINS="https://your-frontend.com" \
+  -e CORS_METHODS="GET,POST,PUT,DELETE" \
+  -e CORS_HEADERS="Content-Type,Authorization" \
+  -e CORS_CREDENTIALS="true" \
+  eudi-srv-web-verifier-endpoint-23220-4-kt:latest
+```
+
+## Health Checks
+
+### Container Health Check
+
+Add a health check to your container:
+
+```bash
+docker run -d \
+  --name verifier-backend \
+  -p 8080:8080 \
+  --health-cmd="curl -f http://localhost:8080/actuator/health || exit 1" \
+  --health-interval=30s \
+  --health-timeout=10s \
+  --health-retries=3 \
+  eudi-srv-web-verifier-endpoint-23220-4-kt:latest
+```
+
+### Check Container Status
+
+```bash
+# View logs
+docker logs verifier-backend
+
+# Follow logs
+docker logs -f verifier-backend
+
+# Check health status
+docker inspect --format='{{json .State.Health}}' verifier-backend
+```
+
+## Troubleshooting
+
+### Container Won't Start
+
+<AccordionGroup>
+  <Accordion title="Port already in use">
+    If port 8080 is already in use, map to a different port:
+    
+    ```bash
+    docker run -d -p 8081:8080 verifier-backend
+    ```
+  </Accordion>
+
+  <Accordion title="Permission denied for keystore">
+    Ensure the keystore file has proper permissions:
+    
+    ```bash
+    chmod 644 /path/to/keystore.jks
+    ```
+  </Accordion>
+
+  <Accordion title="Memory issues">
+    Increase container memory limits:
+    
+    ```bash
+    docker run -d --memory="2g" --memory-swap="2g" verifier-backend
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Viewing Container Logs
+
+```bash
+# View all logs
+docker logs verifier-backend
+
+# View last 100 lines
+docker logs --tail 100 verifier-backend
+
+# Follow logs in real-time
+docker logs -f verifier-backend
+
+# View logs with timestamps
+docker logs -t verifier-backend
+```
+
+### Restarting the Container
+
+```bash
+# Restart container
+docker restart verifier-backend
+
+# Stop container
+docker stop verifier-backend
+
+# Start stopped container
+docker start verifier-backend
+
+# Remove container
+docker rm -f verifier-backend
+```
+
+<Warning>
+  The verifier endpoint requires HTTPS in production. Use a reverse proxy like HAProxy or nginx for SSL termination. See the [Docker Compose guide](/deployment/docker-compose) for a complete setup with SSL.
+</Warning>
+
+## Next Steps
+
+- Learn about [Docker Compose deployment](/deployment/docker-compose) for running the full stack
+- Explore [Configuration options](/configuration/environment-variables)
+- Set up [Azure deployment](/deployment/azure) for cloud hosting

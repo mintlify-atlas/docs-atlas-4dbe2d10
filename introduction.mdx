@@ -1,0 +1,93 @@
+---
+title: "Introduction"
+description: "OpenID4VP verifier endpoint implementing credential verification flows for EU Digital Identity Wallet"
+---
+
+## Overview
+
+The EUDI Verifier Endpoint is a backend RESTful service that acts as a Verifier/Relying Party (RP) trusted endpoint implementing the [OpenID4VP (1.0)](https://openid.net/specs/openid-4-verifiable-presentations-1_0-final.html) protocol. It enables secure verification of digital credentials presented by EU Digital Identity Wallets.
+
+This service works alongside the [EUDI Web Verifier UI](https://github.com/eu-digital-identity-wallet/eudi-web-verifier) to provide a complete verification solution for both same-device and cross-device presentation flows.
+
+<Note>
+This is part of the [EUDI Wallet Reference Implementation](https://github.com/eu-digital-identity-wallet/.github/blob/main/profile/reference-implementation.md) project.
+</Note>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="OpenID4VP 1.0" icon="shield-check">
+    Full implementation of the OpenID4VP protocol for credential verification
+  </Card>
+  <Card title="Multiple Flows" icon="arrows-split-up-and-left">
+    Support for both same-device and cross-device presentation flows
+  </Card>
+  <Card title="Credential Formats" icon="file-certificate">
+    MSO MDoc and SD-JWT VC credential format support
+  </Card>
+  <Card title="DCQL Queries" icon="magnifying-glass">
+    Advanced credential querying using Digital Credentials Query Language
+  </Card>
+  <Card title="Trust Management" icon="key">
+    Flexible trust source configuration with LOTL, Trust Lists, and Keystores
+  </Card>
+  <Card title="JAR Signing" icon="signature">
+    JWT-secured Authorization Request signing with multiple algorithms
+  </Card>
+  <Card title="Response Encryption" icon="lock">
+    Multiple encryption algorithms for secure authorization responses
+  </Card>
+  <Card title="QR Code Generation" icon="qrcode">
+    Built-in QR code generation for cross-device flows
+  </Card>
+</CardGroup>
+
+## Architecture
+
+The verifier endpoint exposes two primary APIs:
+
+- **Verifier API** — Used by verifier applications to initiate transactions and retrieve wallet responses
+- **Wallet API** — Used by wallet applications to retrieve authorization requests and post responses
+
+Both APIs must be exposed over HTTPS in production environments.
+
+## Use Cases
+
+The EUDI Verifier Endpoint supports various credential verification scenarios:
+
+- **Identity Verification** — Verify Personal Identification Data (PID) from EU Digital Identity Wallets
+- **Age Verification** — Request and verify age-related attributes without revealing full identity
+- **Qualified Attestations** — Verify Qualified Electronic Attestations of Attributes (QEAA)
+- **Custom Credentials** — Request any credential type supported by the wallet
+
+## Quick Links
+
+<CardGroup cols={2}>
+  <Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+    Get up and running in minutes with Docker
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/verifier/initialize-transaction">
+    Explore the complete API documentation
+  </Card>
+  <Card title="Configuration" icon="gear" href="/configuration/overview">
+    Learn how to configure the verifier endpoint
+  </Card>
+  <Card title="Presentation Flows" icon="diagram-project" href="/concepts/presentation-flows">
+    Understand same-device and cross-device flows
+  </Card>
+</CardGroup>
+
+## Standards & Specifications
+
+This implementation follows these key specifications:
+
+- [OpenID for Verifiable Presentations 1.0](https://openid.net/specs/openid-4-verifiable-presentations-1_0-final.html)
+- [JWT-Secured Authorization Request (JAR)](https://www.rfc-editor.org/rfc/rfc9101.html)
+- [ISO/IEC 18013-5:2021 Mobile Driving License (mDL)](https://www.iso.org/standard/69084.html)
+- [SD-JWT-based Verifiable Credentials (SD-JWT VC)](https://datatracker.ietf.org/doc/draft-ietf-oauth-sd-jwt-vc/)
+
+## License
+
+Copyright (c) 2023 European Commission
+
+Licensed under the Apache License, Version 2.0. See the [LICENSE](https://github.com/eu-digital-identity-wallet/av-srv-web-verifier-endpoint-23220-4-kt/blob/main/LICENSE) file for details.

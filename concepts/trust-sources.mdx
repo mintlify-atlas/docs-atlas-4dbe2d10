@@ -1,0 +1,339 @@
+---
+title: Trust Sources
+description: Configuring certificate trust sources for credential validation in the EUDI Verifier Endpoint
+---
+
+Trust sources define which issuers the verifier trusts when validating presented credentials. The EUDI Verifier Endpoint supports multiple trust source types that can be configured per credential type using regex patterns.
+
+## Overview
+
+When a wallet presents credentials, the verifier must validate that the credentials were issued by a trusted authority. This is done by validating the issuer's certificate chain against configured trust sources.
+
+The verifier supports three types of trust sources:
+
+1. **LOTL (List of Trusted Lists)** - A meta-list that references multiple trust lists
+2. **Trust List (TL)** - An XML document containing trusted issuer certificates
+3. **Keystore** - A local keystore file containing trusted certificates
+
+<Note>
+You can combine multiple trust source types for the same pattern. For example, you might use both a LOTL and a keystore to cover different issuer types.
+</Note>
+
+## Trust Source Configuration
+
+Trust sources are configured using indexed environment variables starting from `0`:
+
+```bash
+# Pattern to match credential types
+VERIFIER_TRUSTSOURCES_0_PATTERN="eu.europa.ec.eudi.pid.*|urn:eu.europa.ec.eudi:pid:.*"
+
+# LOTL configuration
+VERIFIER_TRUSTSOURCES_0_LOTL_LOCATION="https://example.com/lotl.xml"
+VERIFIER_TRUSTSOURCES_0_LOTL_KEYSTORE_PATH="classpath:lotl-key.jks"
+VERIFIER_TRUSTSOURCES_0_LOTL_KEYSTORE_TYPE="jks"
+VERIFIER_TRUSTSOURCES_0_LOTL_KEYSTORE_PASSWORD="secret"
+
+# Trust List configuration
+VERIFIER_TRUSTSOURCES_0_TL_LOCATION="https://example.com/tl.xml"
+VERIFIER_TRUSTSOURCES_0_TL_KEYSTORE_PATH="classpath:tl-key.jks"
+
+# Add more trust sources with index 1, 2, etc.
+VERIFIER_TRUSTSOURCES_1_PATTERN=".*"
+VERIFIER_TRUSTSOURCES_1_LOTL_LOCATION="https://example.com/another-lotl.xml"
+```
+
+*From the [Configuration section in README](/home/daytona/workspace/source/README.md#L681-L740)*
+
+### Pattern Matching
+
+The `PATTERN` field uses a regex to match against:
+- **MSO MDoc credentials**: The `docType` value (e.g., `eu.europa.ec.eudi.pid.1`)
+- **SD-JWT VC credentials**: The `vct` value (e.g., `urn:eu.europa.ec.eudi:pid:1`)
+
+Example patterns:
+```bash
+# Match all PID credentials
+"eu.europa.ec.eudi.pid.*|urn:eu.europa.ec.eudi:pid:.*"
+
+# Match all credentials (fallback)
+".*"
+
+# Match specific credential type
+"eu.europa.ec.eudi.mdl.1"
+```
+
+## LOTL (List of Trusted Lists)
+
+A List of Trusted Lists is a meta-list that references multiple trust lists, typically used in federated trust frameworks like the EU Digital Identity Wallet.
+
+### Configuration
+
+```bash
+# LOTL location URL
+VERIFIER_TRUSTSOURCES_0_LOTL_LOCATION="https://preprod.pki.eudiw.dev/lotl.xml"
+
+# Refresh interval (cron expression, default: every hour)
+VERIFIER_TRUSTSOURCES_0_LOTL_REFRESHINTERVAL="0 0 */4 * * *"
+
+# Service type filter (optional)
+VERIFIER_TRUSTSOURCES_0_LOTL_SERVICETYPEFILTER="PIDProvider"
+
+# Keystore containing LOTL signing key
+VERIFIER_TRUSTSOURCES_0_LOTL_KEYSTORE_PATH="classpath:lotl-key.jks"
+VERIFIER_TRUSTSOURCES_0_LOTL_KEYSTORE_TYPE="jks"
+VERIFIER_TRUSTSOURCES_0_LOTL_KEYSTORE_PASSWORD="changeit"
+```
+
+### Service Type Filters
+
+Filter certificates by provider type:
+
+- `PIDProvider` - Person Identification Data providers
+- `QEEAProvider` - Qualified Electronic Attestation of Attributes providers
+- `PubEAAProvider` - Public Electronic Attestation of Attributes providers
+
+```kotlin
+enum class ProviderKind(val value: String) {
+    PIDProvider("http://uri.etsi.org/Svc/Svctype/Provider/PID"),
+    QEEAProvider("http://uri.etsi.org/TrstSvc/Svctype/EAA/Q"),
+    PubEAAProvider("http://uri.etsi.org/TrstSvc/Svctype/EAA/Pub-EAA"),
+    PAAProvider("http://uri.etsi.org/TrstSvc/SvcInfoExt/eSigDir-1999-93-EC-TrustedList/#"),
+}
+```
+
+*From [VerifierConfig.kt:344-349](/home/daytona/workspace/source/src/main/kotlin/eu/europa/ec/eudi/verifier/endpoint/domain/VerifierConfig.kt#L344-L349)*
+
+### Implementation
+
+The verifier fetches and validates LOTLs:
+
+```kotlin
+/**
+ * Interface for fetching LOTL certificates
+ */
+fun interface FetchLOTLCertificates {
+    /**
+     * Fetch certificates from a LOTL URL
+     * @param trustedListConfig Configuration for the trusted list
+     * @return Result containing a list of X509 certificates or an exception
+     */
+    suspend operator fun invoke(
+        trustedListConfig: TrustedListConfig,
+    ): Either<Throwable, List<X509Certificate>>
+}
+```
+
+*From [FetchLOTLCertificates.kt:22-34](/home/daytona/workspace/source/src/main/kotlin/eu/europa/ec/eudi/verifier/endpoint/port/out/lotl/FetchLOTLCertificates.kt#L22-L34)*
+
+## Trust List (TL)
+
+A Trust List is an XML document containing X.509 certificates of trusted issuers.
+
+### Configuration
+
+```bash
+# Trust List location URL
+VERIFIER_TRUSTSOURCES_0_TL_LOCATION="https://preprod.pki.eudiw.dev/tl.xml"
+
+# Refresh interval (cron expression)
+VERIFIER_TRUSTSOURCES_0_TL_REFRESHINTERVAL="0 0 */4 * * *"
+
+# Service type filter (optional)
+VERIFIER_TRUSTSOURCES_0_TL_SERVICETYPEFILTER="PAAProvider"
+
+# Keystore containing TL signing key
+VERIFIER_TRUSTSOURCES_0_TL_KEYSTORE_PATH="file:///certs/tl-key.jks"
+VERIFIER_TRUSTSOURCES_0_TL_KEYSTORE_TYPE="pkcs12"
+VERIFIER_TRUSTSOURCES_0_TL_KEYSTORE_PASSWORD="secret"
+```
+
+### Implementation
+
+```kotlin
+/**
+ * Interface for fetching TL (Trusted List) certificates
+ */
+interface FetchTLCertificates {
+    /**
+     * Fetch certificates from a TL URL
+     * @param trustedListConfig Configuration for the trusted list
+     * @return Result containing a list of X509 certificates or an exception
+     */
+    suspend operator fun invoke(
+        trustedListConfig: TrustedListConfig,
+    ): Either<Throwable, List<X509Certificate>>
+}
+```
+
+*From [FetchTLCertificates.kt:22-34](/home/daytona/workspace/source/src/main/kotlin/eu/europa/ec/eudi/verifier/endpoint/port/out/tl/FetchTLCertificates.kt#L22-L34)*
+
+## Keystore
+
+Keystores provide a local source of trusted certificates, useful for testing or private trust frameworks.
+
+### Configuration
+
+```bash
+# Keystore path (classpath or file)
+VERIFIER_TRUSTSOURCES_0_KEYSTORE_PATH="classpath:trust.jks"
+
+# Keystore type
+VERIFIER_TRUSTSOURCES_0_KEYSTORE_TYPE="jks"
+
+# Keystore password (optional)
+VERIFIER_TRUSTSOURCES_0_KEYSTORE_PASSWORD="changeit"
+```
+
+### Keystore Formats
+
+Supported keystore types:
+- `jks` - Java KeyStore format
+- `pkcs12` - PKCS#12 format
+
+## Trust Source Provider
+
+The trust source provider matches credential types to trust sources:
+
+```kotlin
+/**
+ * Functional interface for providing appropriate X5CShouldBe trust source based on document type.
+ */
+fun interface ProvideTrustSource {
+    /**
+     * Returns the appropriate X5CShouldBe for the given doctype/vct.
+     *
+     * @param type The doctype/vct
+     * @return The X5CShouldBe configuration for the doctype/vct
+     */
+    suspend operator fun invoke(type: String): X5CShouldBe?
+}
+```
+
+*From [TrustSources.kt:24-40](/home/daytona/workspace/source/src/main/kotlin/eu/europa/ec/eudi/verifier/endpoint/adapter/out/cert/TrustSources.kt#L24-L40)*
+
+The implementation matches patterns and returns the appropriate trust configuration:
+
+```kotlin
+class TrustSources(
+    private val revocationEnabled: Boolean = false,
+    private val x5CShouldBeMap: MutableMap<Regex, X5CShouldBe> = mutableMapOf(),
+) : ProvideTrustSource {
+
+    override suspend fun invoke(type: String): X5CShouldBe? =
+        mutex.withLock {
+            x5CShouldBeMap.entries
+                .firstOrNull { (pattern, _) -> pattern.matches(type) }
+                ?.value
+        }
+}
+```
+
+*From [TrustSources.kt:42-91](/home/daytona/workspace/source/src/main/kotlin/eu/europa/ec/eudi/verifier/endpoint/adapter/out/cert/TrustSources.kt#L42-L91)*
+
+## Per-Transaction Trust
+
+You can override trust sources for individual transactions by providing an `issuer_chain` during initialization:
+
+```bash
+curl -X POST http://localhost:8080/ui/presentations \
+  -H "Content-Type: application/json" \
+  -d '{
+    "dcql_query": { ... },
+    "nonce": "unique-nonce",
+    "issuer_chain": "-----BEGIN CERTIFICATE-----\nMIIDHTCCAqOg...\n-----END CERTIFICATE-----"
+  }'
+```
+
+The `issuer_chain` should be a PEM-encoded X.509 certificate chain (including start and end markers).
+
+*From the [Initialize Transaction endpoint documentation](/home/daytona/workspace/source/README.md#L232-L246)*
+
+## Docker Configuration Example
+
+When running in Docker, trust sources are configured via environment variables:
+
+```yaml
+services:
+  verifier:
+    image: ghcr.io/eu-digital-identity-wallet/eudi-srv-web-verifier-endpoint-23220-4-kt:latest
+    container_name: verifier-backend
+    environment:
+      # Basic configuration
+      VERIFIER_PUBLICURL: "https://verifier.example.com"
+      VERIFIER_RESPONSE_MODE: "DirectPost"
+      
+      # Trust source for PID credentials
+      VERIFIER_TRUSTSOURCES_0_PATTERN: "eu.europa.ec.eudi.pid.*"
+      VERIFIER_TRUSTSOURCES_0_LOTL_LOCATION: "https://preprod.pki.eudiw.dev/lotl.xml"
+      VERIFIER_TRUSTSOURCES_0_LOTL_KEYSTORE_PATH: "file:///certs/lotl-key.jks"
+      VERIFIER_TRUSTSOURCES_0_LOTL_KEYSTORE_TYPE: "jks"
+      VERIFIER_TRUSTSOURCES_0_LOTL_KEYSTORE_PASSWORD: "changeit"
+      
+      # Trust source for MDL credentials
+      VERIFIER_TRUSTSOURCES_1_PATTERN: "eu.europa.ec.eudi.mdl.*"
+      VERIFIER_TRUSTSOURCES_1_TL_LOCATION: "https://preprod.pki.eudiw.dev/mdl-tl.xml"
+    volumes:
+      - ./certs/lotl-key.jks:/certs/lotl-key.jks:ro
+```
+
+## Trust Validation Types
+
+The verifier supports two validation types:
+
+```kotlin
+enum class ValidationType {
+    DS,    // Direct validation using Document Signer certificates
+    PKIX,  // PKIX path validation using CA certificates
+}
+```
+
+*From [VerifierConfig.kt:365-368](/home/daytona/workspace/source/src/main/kotlin/eu/europa/ec/eudi/verifier/endpoint/domain/VerifierConfig.kt#L365-L368)*
+
+- **PKIX** (default): Validates the full certificate chain using CA certificates
+- **DS**: Directly trusts Document Signer (DS) certificates without chain validation
+
+## Refresh Intervals
+
+Trust lists are refreshed automatically using cron expressions:
+
+```bash
+# Every hour (default)
+VERIFIER_TRUSTSOURCES_0_LOTL_REFRESHINTERVAL="0 0 * * * *"
+
+# Every 4 hours
+VERIFIER_TRUSTSOURCES_0_LOTL_REFRESHINTERVAL="0 0 */4 * * *"
+
+# Every day at midnight
+VERIFIER_TRUSTSOURCES_0_LOTL_REFRESHINTERVAL="0 0 0 * * *"
+```
+
+The cron format follows standard 6-field notation: `second minute hour day month weekday`
+
+## Troubleshooting
+
+### Trust Source Not Found
+
+If credentials fail validation with "no trust source found":
+
+1. Check that your pattern matches the credential's docType/vct
+2. Verify the trust source URL is accessible
+3. Check logs for certificate loading errors
+
+### Certificate Validation Failures
+
+1. Ensure the keystore password is correct
+2. Verify the keystore contains the correct signing certificate
+3. Check that certificates haven't expired
+4. Enable revocation checking if needed
+
+## Related Configuration
+
+- [Environment Variables](/configuration/environment-variables) - Complete configuration reference
+- [JAR Signing Configuration](/configuration/jar-signing) - Configure authorization request signing
+- [Client Metadata](/configuration/client-metadata) - Configure supported VP formats
+
+## Next Steps
+
+- Learn about [Transactions](/concepts/transactions) and their lifecycle
+- Explore [Presentation Flows](/concepts/presentation-flows) for request/response patterns
+- Review the [Validation Endpoint](/api-reference/utility/validate-mdoc) for testing credentials

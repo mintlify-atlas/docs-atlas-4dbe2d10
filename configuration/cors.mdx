@@ -1,0 +1,365 @@
+---
+title: 'CORS Configuration'
+description: 'Configure Cross-Origin Resource Sharing (CORS) policies'
+---
+
+The EUDI Verifier Endpoint supports Cross-Origin Resource Sharing (CORS) to allow web applications from different origins to access the verifier APIs.
+
+## Overview
+
+CORS configuration controls which web applications can make requests to the verifier endpoint from browsers. Proper CORS configuration is essential when your verifier is accessed by web applications hosted on different domains.
+
+<Warning>
+  The default configuration (`*` for all settings) is permissive and suitable for development only. Always restrict CORS in production environments.
+</Warning>
+
+## CORS Configuration Variables
+
+### Allowed Origins
+
+<ParamField path="CORS_ORIGINS" type="string" default="*">
+  Comma separated list of allowed Origins for cross-origin requests.
+  
+  **Examples:**
+  - `https://verifier-ui.example.com` - Single origin
+  - `https://verifier-ui.example.com,https://app.example.com` - Multiple origins
+  - `*` - All origins (development only)
+</ParamField>
+
+### Origin Patterns
+
+<ParamField path="CORS_ORIGINPATTERNS" type="string" default="*">
+  Comma separated list of patterns used for more fine grained matching of allowed Origins for cross-origin requests.
+  
+  Supports wildcard matching for dynamic subdomains.
+  
+  **Examples:**
+  - `https://*.example.com` - All subdomains of example.com
+  - `https://verifier-*.example.com` - All verifier subdomains
+  - `*` - All patterns (development only)
+</ParamField>
+
+### Allowed Methods
+
+<ParamField path="CORS_METHODS" type="string" default="*">
+  Comma separated list of HTTP methods allowed for cross-origin requests.
+  
+  **Examples:**
+  - `GET,POST` - Only GET and POST
+  - `GET,POST,OPTIONS` - Including preflight
+  - `*` - All methods (development only)
+  
+  **Common values:** `GET`, `POST`, `PUT`, `DELETE`, `OPTIONS`, `HEAD`, `PATCH`
+</ParamField>
+
+### Allowed Headers
+
+<ParamField path="CORS_HEADERS" type="string" default="*">
+  Comma separated list of allowed and exposed HTTP Headers for cross-origin requests.
+  
+  **Examples:**
+  - `Content-Type,Authorization` - Common headers
+  - `Content-Type,Authorization,X-Custom-Header` - Including custom headers
+  - `*` - All headers (development only)
+  
+  **Common values:** `Content-Type`, `Authorization`, `Accept`, `Origin`, `X-Requested-With`
+</ParamField>
+
+### Allow Credentials
+
+<ParamField path="CORS_CREDENTIALS" type="boolean" default="false">
+  Whether credentials (i.e. Cookies or Authorization Header) are allowed for cross-origin requests.
+  
+  Set to `true` if your application needs to send cookies or authorization headers with cross-origin requests.
+</ParamField>
+
+<Warning>
+  When `CORS_CREDENTIALS=true`, you cannot use `*` for `CORS_ORIGINS` or `CORS_ORIGINPATTERNS`. You must specify explicit origins.
+</Warning>
+
+### Preflight Cache Max Age
+
+<ParamField path="CORS_MAXAGE" type="integer" default="3600">
+  Time in seconds of how long pre-flight request responses can be cached by clients.
+  
+  **Examples:**
+  - `3600` - 1 hour (default)
+  - `7200` - 2 hours
+  - `86400` - 24 hours
+</ParamField>
+
+## Configuration Examples
+
+### Development Configuration (Permissive)
+
+```bash
+# Allow all origins, methods, and headers (development only)
+CORS_ORIGINS=*
+CORS_ORIGINPATTERNS=*
+CORS_METHODS=*
+CORS_HEADERS=*
+CORS_CREDENTIALS=false
+CORS_MAXAGE=3600
+```
+
+<Warning>
+  This configuration should **never** be used in production as it allows any website to access your verifier endpoint.
+</Warning>
+
+### Production Configuration (Restrictive)
+
+```bash
+# Allow only specific origins
+CORS_ORIGINS=https://verifier-ui.example.com
+CORS_ORIGINPATTERNS=
+CORS_METHODS=GET,POST,OPTIONS
+CORS_HEADERS=Content-Type,Authorization,Accept
+CORS_CREDENTIALS=true
+CORS_MAXAGE=7200
+```
+
+### Multiple Origins
+
+```bash
+# Allow multiple specific origins
+CORS_ORIGINS=https://verifier-ui.example.com,https://app.example.com,https://portal.example.com
+CORS_ORIGINPATTERNS=
+CORS_METHODS=GET,POST,OPTIONS
+CORS_HEADERS=Content-Type,Authorization
+CORS_CREDENTIALS=true
+CORS_MAXAGE=3600
+```
+
+### Wildcard Subdomain Pattern
+
+```bash
+# Allow all subdomains of example.com
+CORS_ORIGINS=
+CORS_ORIGINPATTERNS=https://*.example.com
+CORS_METHODS=GET,POST,OPTIONS
+CORS_HEADERS=Content-Type,Authorization
+CORS_CREDENTIALS=false
+CORS_MAXAGE=7200
+```
+
+### Mixed Origins and Patterns
+
+```bash
+# Combine specific origins and patterns
+CORS_ORIGINS=https://main-app.example.com
+CORS_ORIGINPATTERNS=https://*.test.example.com,https://dev-*.example.com
+CORS_METHODS=GET,POST,OPTIONS
+CORS_HEADERS=Content-Type,Authorization
+CORS_CREDENTIALS=false
+CORS_MAXAGE=3600
+```
+
+### API-Only Configuration
+
+```bash
+# Minimal configuration for API access
+CORS_ORIGINS=https://api-client.example.com
+CORS_ORIGINPATTERNS=
+CORS_METHODS=GET,POST
+CORS_HEADERS=Content-Type,Authorization,Accept
+CORS_CREDENTIALS=true
+CORS_MAXAGE=86400
+```
+
+## Docker Compose Example
+
+```yaml
+verifier:
+  image: ghcr.io/eu-digital-identity-wallet/eudi-srv-web-verifier-endpoint-23220-4-kt:latest
+  container_name: verifier-backend
+  ports:
+    - "8080:8080"
+  environment:
+    VERIFIER_PUBLICURL: "https://verifier.example.com"
+    
+    # CORS Configuration
+    CORS_ORIGINS: "https://verifier-ui.example.com"
+    CORS_ORIGINPATTERNS: ""
+    CORS_METHODS: "GET,POST,OPTIONS"
+    CORS_HEADERS: "Content-Type,Authorization,Accept"
+    CORS_CREDENTIALS: "true"
+    CORS_MAXAGE: "7200"
+```
+
+## CORS Testing
+
+To test your CORS configuration, use curl with the `Origin` header:
+
+```bash
+# Test preflight request
+curl -i -X OPTIONS https://verifier.example.com/ui/presentations \
+  -H "Origin: https://verifier-ui.example.com" \
+  -H "Access-Control-Request-Method: POST" \
+  -H "Access-Control-Request-Headers: Content-Type"
+
+# Test actual request
+curl -i -X POST https://verifier.example.com/ui/presentations \
+  -H "Origin: https://verifier-ui.example.com" \
+  -H "Content-Type: application/json" \
+  -d '{"dcql_query": {...}}'
+```
+
+Expected response headers:
+```
+Access-Control-Allow-Origin: https://verifier-ui.example.com
+Access-Control-Allow-Methods: GET,POST,OPTIONS
+Access-Control-Allow-Headers: Content-Type,Authorization,Accept
+Access-Control-Max-Age: 7200
+```
+
+## Security Best Practices
+
+<AccordionGroup>
+  <Accordion title="Never Use Wildcards in Production">
+    Avoid `CORS_ORIGINS=*` or `CORS_METHODS=*` in production. Always specify explicit values.
+  </Accordion>
+  
+  <Accordion title="Use HTTPS Origins Only">
+    Only allow HTTPS origins in production to prevent man-in-the-middle attacks.
+    
+    ```bash
+    # Good
+    CORS_ORIGINS=https://app.example.com
+    
+    # Bad (in production)
+    CORS_ORIGINS=http://app.example.com
+    ```
+  </Accordion>
+  
+  <Accordion title="Minimize Allowed Methods">
+    Only allow HTTP methods that are actually used by your client applications.
+    
+    ```bash
+    # If only GET and POST are needed
+    CORS_METHODS=GET,POST,OPTIONS
+    ```
+  </Accordion>
+  
+  <Accordion title="Minimize Allowed Headers">
+    Only allow headers that are necessary for your application.
+    
+    ```bash
+    # Only allow required headers
+    CORS_HEADERS=Content-Type,Authorization
+    ```
+  </Accordion>
+  
+  <Accordion title="Be Careful with Credentials">
+    Only set `CORS_CREDENTIALS=true` if absolutely necessary, and never combine it with `CORS_ORIGINS=*`.
+  </Accordion>
+  
+  <Accordion title="Use Appropriate Cache Duration">
+    Set `CORS_MAXAGE` to balance between performance and security. 1-2 hours is typically appropriate.
+  </Accordion>
+  
+  <Accordion title="Validate Origin Patterns">
+    When using `CORS_ORIGINPATTERNS`, ensure patterns are specific enough to prevent unintended access.
+    
+    ```bash
+    # Too broad
+    CORS_ORIGINPATTERNS=https://*
+    
+    # Better
+    CORS_ORIGINPATTERNS=https://*.example.com
+    ```
+  </Accordion>
+  
+  <Accordion title="Monitor CORS Errors">
+    Log and monitor CORS-related errors to detect potential security issues or misconfigurations.
+  </Accordion>
+</AccordionGroup>
+
+## Common CORS Scenarios
+
+### Same-Origin Deployment
+
+If your UI and backend are on the same domain, CORS is not needed:
+
+```bash
+# Minimal CORS for same-origin
+CORS_ORIGINS=
+CORS_ORIGINPATTERNS=
+CORS_METHODS=
+CORS_HEADERS=
+CORS_CREDENTIALS=false
+```
+
+### Different Subdomain
+
+UI at `verifier-ui.example.com`, backend at `verifier-api.example.com`:
+
+```bash
+CORS_ORIGINS=https://verifier-ui.example.com
+CORS_METHODS=GET,POST,OPTIONS
+CORS_HEADERS=Content-Type,Authorization
+CORS_CREDENTIALS=true
+```
+
+### Mobile App with Web View
+
+Mobile apps using web views may use `file://` or app-specific origins:
+
+```bash
+CORS_ORIGINS=https://app.example.com
+CORS_ORIGINPATTERNS=app://localhost,file://
+CORS_METHODS=GET,POST,OPTIONS
+CORS_HEADERS=Content-Type,Authorization
+CORS_CREDENTIALS=false
+```
+
+### Multiple Environments
+
+Support dev, staging, and production:
+
+```bash
+CORS_ORIGINS=https://verifier-ui.example.com,https://verifier-ui-staging.example.com
+CORS_ORIGINPATTERNS=https://*.dev.example.com
+CORS_METHODS=GET,POST,OPTIONS
+CORS_HEADERS=Content-Type,Authorization
+CORS_CREDENTIALS=true
+```
+
+## Troubleshooting
+
+### CORS Error: "No 'Access-Control-Allow-Origin' header"
+
+**Problem:** Browser blocks request due to missing CORS header.
+
+**Solutions:**
+1. Add the client origin to `CORS_ORIGINS` or `CORS_ORIGINPATTERNS`
+2. Ensure the origin uses the same protocol (https) as configured
+3. Check for typos in the origin URL
+
+### CORS Error: "Credentials flag is true, but Access-Control-Allow-Credentials header is not present"
+
+**Problem:** Client sends credentials but server doesn't allow them.
+
+**Solution:**
+```bash
+CORS_CREDENTIALS=true
+```
+
+### CORS Error: "Method not allowed"
+
+**Problem:** Client uses HTTP method not in `CORS_METHODS`.
+
+**Solution:**
+```bash
+# Add the required method
+CORS_METHODS=GET,POST,PUT,OPTIONS
+```
+
+### CORS Error: "Request header field not allowed"
+
+**Problem:** Client sends header not in `CORS_HEADERS`.
+
+**Solution:**
+```bash
+# Add the required header
+CORS_HEADERS=Content-Type,Authorization,X-Custom-Header
+```

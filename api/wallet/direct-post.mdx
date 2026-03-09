@@ -1,0 +1,211 @@
+---
+title: 'Direct Post'
+description: 'Submit the wallet response containing verifiable presentations'
+---
+
+## Overview
+
+This endpoint allows the wallet to submit its response to an OpenID4VP authorization request. The wallet posts the requested verifiable presentations (vp_token) along with the state parameter to complete the presentation flow.
+
+The endpoint supports two response modes:
+- **direct_post**: Plain form data with vp_token
+- **direct_post.jwt**: Encrypted JWT (JWE) containing the response
+
+## Endpoint
+
+```
+POST /wallet/direct_post/{requestId}
+```
+
+## Path Parameters
+
+<ParamField path="requestId" type="string" required>
+  The unique identifier of the authorization request. This matches the `state` value from the authorization request JWT.
+</ParamField>
+
+## Request Body
+
+**Content-Type:** `application/x-www-form-urlencoded`
+
+### For response_mode = direct_post
+
+<ParamField body="state" type="string" required>
+  The state claim from the authorization request JWT. This value is used to correlate the response with the original request.
+</ParamField>
+
+<ParamField body="vp_token" type="string" required>
+  A JSON object containing the requested verifiable presentations. The structure depends on the presentation definition format.
+  
+  Example: `{"32f54163-7166-48f1-93d8-ff217bdb0653": [{"id": "123456"}]}`
+</ParamField>
+
+<ParamField body="error" type="string">
+  Optional error code if the wallet encountered an error (e.g., `access_denied`)
+</ParamField>
+
+<ParamField body="error_description" type="string">
+  Optional human-readable error description
+</ParamField>
+
+### For response_mode = direct_post.jwt
+
+<ParamField body="state" type="string" required>
+  The state claim from the authorization request JWT
+</ParamField>
+
+<ParamField body="response" type="string" required>
+  An encrypted JWT (JWE) containing the vp_token and other response parameters as claims. This provides additional confidentiality for the wallet response.
+</ParamField>
+
+## Response
+
+The response varies depending on whether the presentation flow is same-device or cross-device.
+
+### Same Device Flow
+
+**HTTP Status:** `200 OK`
+
+**Content-Type:** `application/json`
+
+<ResponseField name="redirect_uri" type="string">
+  The URL where the wallet should redirect the user agent. This URL includes a `response_code` parameter that the verifier UI will use to retrieve the wallet response.
+  
+  Example: `https://dev.verifier.eudiw.dev/get-wallet-code?response_code=5272d373-ebab-40ec-b44d-0a9909d0da69`
+</ResponseField>
+
+### Cross Device Flow
+
+**HTTP Status:** `200 OK`
+
+**Content-Type:** `application/json`
+
+Returns an empty JSON object `{}`. The verifier UI polls for the wallet response separately.
+
+## Example Requests
+
+### direct_post Mode
+
+```bash
+STATE=IsoY9VwZXJ8GS7zg4CEHsCNu-5LpAiPGjbwYssZ2nh3tnkhytNw2mNZLSFsKOwdG2Ww33hX6PUp6P9xImdS-qA
+
+curl -v -X POST 'http://localhost:8080/wallet/direct_post' \
+  -H "Content-type: application/x-www-form-urlencoded" \
+  -H "Accept: application/json" \
+  --data-urlencode "state=$STATE" \
+  --data-urlencode 'vp_token={"32f54163-7166-48f1-93d8-ff217bdb0653": [{"id": "123456"}]}'
+```
+
+### direct_post.jwt Mode
+
+```bash
+STATE=IsoY9VwZXJ8GS7zg4CEHsCNu-5LpAiPGjbwYssZ2nh3tnkhytNw2mNZLSFsKOwdG2Ww33hX6PUp6P9xImdS-qA
+JWE_RESPONSE=eyJhbGciOiJFQ0RILUVTIiwiZW5jIjoiQTEyOEdDTSJ9...
+
+curl -v -X POST 'http://localhost:8080/wallet/direct_post' \
+  -H "Content-type: application/x-www-form-urlencoded" \
+  -H "Accept: application/json" \
+  --data-urlencode "state=$STATE" \
+  --data-urlencode "response=$JWE_RESPONSE"
+```
+
+## Example Responses
+
+### Same Device Response
+
+```json
+{
+  "redirect_uri": "https://dev.verifier.eudiw.dev/get-wallet-code?response_code=5272d373-ebab-40ec-b44d-0a9909d0da69"
+}
+```
+
+### Cross Device Response
+
+```json
+{}
+```
+
+## Error Responses
+
+<ResponseField name="400 Bad Request" type="error">
+  The wallet response is invalid. The response body contains a detailed error object with one of the following error codes:
+  
+  - `IncorrectState`: The state parameter doesn't match the expected value
+  - `MissingVpToken`: The vp_token is missing from the response
+  - `InvalidVpToken`: The vp_token format or content is invalid
+  - `InvalidPresentationSubmission`: The presentation_submission doesn't match the vp_token
+  - `InvalidEncryptedResponse`: Failed to decrypt the response JWT
+  - `UnexpectedResponseMode`: The response mode doesn't match the expected mode
+  - `RequiredCredentialSetNotSatisfied`: The required credentials were not provided
+  - `PresentationNotFound`: The presentation transaction doesn't exist or has expired
+  - `PresentationNotInExpectedState`: The presentation is not in a state to accept responses
+</ResponseField>
+
+### Example Error Response
+
+```json
+{
+  "error": "MissingVpToken",
+  "description": "Expected 'vp_token' to be posted by wallet but was not."
+}
+```
+
+## vp_token Format
+
+The `vp_token` supports multiple formats:
+
+### Android Format
+
+A JSON object where keys are credential IDs and values are arrays of presentations:
+
+```json
+{
+  "32f54163-7166-48f1-93d8-ff217bdb0653": ["eyJhbGciOi..."]
+}
+```
+
+### iOS Format
+
+Multiple form parameters with array notation:
+
+```
+vp_token[32f54163-7166-48f1-93d8-ff217bdb0653]=eyJhbGciOi...
+```
+
+## Usage Flow
+
+### Same Device
+
+1. Wallet retrieves authorization request via request_uri
+2. Wallet prepares vp_token with requested credentials
+3. Wallet posts response to this endpoint
+4. Verifier validates response and generates response_code
+5. Verifier returns redirect_uri with response_code
+6. Wallet redirects user agent to redirect_uri
+7. Verifier UI retrieves wallet response using response_code
+
+### Cross Device
+
+1. Wallet retrieves authorization request via request_uri (from QR code)
+2. Wallet prepares vp_token with requested credentials
+3. Wallet posts response to this endpoint
+4. Verifier validates and stores response
+5. Verifier returns empty response
+6. Verifier UI (polling) retrieves wallet response
+
+## Security Considerations
+
+- Always validate the `state` parameter to prevent CSRF attacks
+- For sensitive use cases, use `direct_post.jwt` mode for encrypted responses
+- Implement rate limiting to prevent brute force attacks
+- Verify presentation signatures and validity before accepting credentials
+- Check credential expiration and revocation status
+
+## Related Endpoints
+
+- [GET Request Object](/api/wallet/get-request-object) - Retrieve authorization request
+- [POST Request Object](/api/wallet/post-request-object) - Retrieve request with metadata
+- [Get Wallet Response](/api/verifier/get-wallet-response) - Verifier retrieves the submitted response
+
+## Source Code Reference
+
+Implementation: `WalletApi.kt:107` (`handlePostWalletResponse`)

@@ -1,0 +1,426 @@
+---
+title: 'Proxy Configuration'
+description: 'Configure HTTP proxy settings for outbound connections'
+---
+
+The EUDI Verifier Endpoint can be configured to use an HTTP proxy for outbound connections. This is useful when the verifier is deployed in an environment that requires all external HTTP/HTTPS traffic to go through a proxy server.
+
+## Overview
+
+Proxy configuration allows the verifier to:
+- Access external trust lists (LOTL/TL) through a proxy
+- Fetch SD-JWT VC type metadata through a proxy
+- Connect to credential status checking endpoints through a proxy
+- Perform any other outbound HTTP requests through a proxy
+
+<Info>
+  Proxy configuration is optional. If not configured, the verifier will make direct connections to external services.
+</Info>
+
+## Proxy Configuration Variables
+
+<ParamField path="VERIFIER_HTTP_PROXY_URL" type="string">
+  Optional HTTP proxy server to use for outbound connections.
+  
+  **Format:** `http://hostname:port` or `https://hostname:port`
+  
+  **Examples:**
+  - `http://proxy.example.com:8080`
+  - `https://proxy.example.com:3128`
+  - `http://10.0.0.100:8080`
+</ParamField>
+
+<ParamField path="VERIFIER_HTTP_PROXY_USERNAME" type="string">
+  Username to authenticate against the proxy server.
+  
+  Required if the proxy server requires authentication.
+</ParamField>
+
+<ParamField path="VERIFIER_HTTP_PROXY_PASSWORD" type="string">
+  Password to authenticate against the proxy server.
+  
+  Required if the proxy server requires authentication.
+</ParamField>
+
+## Configuration Examples
+
+### Proxy Without Authentication
+
+Simplest configuration for a proxy that doesn't require authentication:
+
+```bash
+VERIFIER_HTTP_PROXY_URL=http://proxy.example.com:8080
+```
+
+### Proxy With Authentication
+
+Configuration for a proxy that requires username and password:
+
+```bash
+VERIFIER_HTTP_PROXY_URL=http://proxy.example.com:8080
+VERIFIER_HTTP_PROXY_USERNAME=proxyuser
+VERIFIER_HTTP_PROXY_PASSWORD=proxypass
+```
+
+### Corporate Proxy
+
+Typical configuration for a corporate proxy environment:
+
+```bash
+VERIFIER_HTTP_PROXY_URL=http://corporate-proxy.company.com:3128
+VERIFIER_HTTP_PROXY_USERNAME=domain\username
+VERIFIER_HTTP_PROXY_PASSWORD=securePassword123
+```
+
+### HTTPS Proxy
+
+Configuration for a proxy that uses HTTPS:
+
+```bash
+VERIFIER_HTTP_PROXY_URL=https://secure-proxy.example.com:8443
+VERIFIER_HTTP_PROXY_USERNAME=user
+VERIFIER_HTTP_PROXY_PASSWORD=pass
+```
+
+## Complete Configuration Example
+
+Proxy configuration combined with trust sources:
+
+```bash
+# Proxy Configuration
+VERIFIER_HTTP_PROXY_URL=http://proxy.example.com:8080
+VERIFIER_HTTP_PROXY_USERNAME=verifier-service
+VERIFIER_HTTP_PROXY_PASSWORD=secret123
+
+# Trust Sources (will use proxy)
+VERIFIER_TRUSTSOURCES_0_PATTERN=eu.europa.ec.eudi.pid.*
+VERIFIER_TRUSTSOURCES_0_TL_LOCATION=https://preprod.pki.eudiw.dev/tl.xml
+VERIFIER_TRUSTSOURCES_0_TL_SERVICETYPEFILTER=PIDProvider
+
+# SD-JWT VC Type Metadata (will use proxy)
+VERIFIER_VALIDATION_SDJWTVC_TYPEMETADATA_POLICY=optional
+VERIFIER_VALIDATION_SDJWTVC_TYPEMETADATA_RESOLUTION_VCTS_0_VCT=urn:eudi:pid:1
+VERIFIER_VALIDATION_SDJWTVC_TYPEMETADATA_RESOLUTION_VCTS_0_URL=https://metadata.example.com/pid
+```
+
+## Docker Compose Example
+
+### Basic Proxy Configuration
+
+```yaml
+verifier:
+  image: ghcr.io/eu-digital-identity-wallet/eudi-srv-web-verifier-endpoint-23220-4-kt:latest
+  container_name: verifier-backend
+  ports:
+    - "8080:8080"
+  environment:
+    VERIFIER_PUBLICURL: "https://verifier.example.com"
+    
+    # Proxy Configuration
+    VERIFIER_HTTP_PROXY_URL: "http://proxy.example.com:8080"
+    VERIFIER_HTTP_PROXY_USERNAME: "proxyuser"
+    VERIFIER_HTTP_PROXY_PASSWORD: "proxypass"
+```
+
+### Using Docker Secrets for Credentials
+
+```yaml
+version: '3.8'
+
+services:
+  verifier:
+    image: ghcr.io/eu-digital-identity-wallet/eudi-srv-web-verifier-endpoint-23220-4-kt:latest
+    container_name: verifier-backend
+    ports:
+      - "8080:8080"
+    environment:
+      VERIFIER_PUBLICURL: "https://verifier.example.com"
+      VERIFIER_HTTP_PROXY_URL: "http://proxy.example.com:8080"
+      VERIFIER_HTTP_PROXY_USERNAME: "proxyuser"
+    secrets:
+      - proxy_password
+    command: |
+      sh -c '
+        export VERIFIER_HTTP_PROXY_PASSWORD=$$(cat /run/secrets/proxy_password)
+        java -jar /app/application.jar
+      '
+
+secrets:
+  proxy_password:
+    file: ./secrets/proxy_password.txt
+```
+
+### Network Configuration with Proxy
+
+```yaml
+version: '3.8'
+
+services:
+  verifier:
+    image: ghcr.io/eu-digital-identity-wallet/eudi-srv-web-verifier-endpoint-23220-4-kt:latest
+    container_name: verifier-backend
+    networks:
+      - internal
+      - dmz
+    ports:
+      - "8080:8080"
+    environment:
+      VERIFIER_HTTP_PROXY_URL: "http://proxy:3128"
+      VERIFIER_HTTP_PROXY_USERNAME: "verifier"
+      VERIFIER_HTTP_PROXY_PASSWORD: "${PROXY_PASSWORD}"
+
+  proxy:
+    image: squid:latest
+    container_name: proxy
+    networks:
+      - dmz
+      - external
+    volumes:
+      - ./squid.conf:/etc/squid/squid.conf:ro
+
+networks:
+  internal:
+  dmz:
+  external:
+```
+
+## Testing Proxy Configuration
+
+### Test Proxy Connectivity
+
+Verify that the proxy is reachable:
+
+```bash
+# Test basic connectivity
+curl -x http://proxy.example.com:8080 https://www.google.com
+
+# Test with authentication
+curl -x http://proxy.example.com:8080 \
+  -U username:password \
+  https://www.google.com
+```
+
+### Verify Verifier Uses Proxy
+
+Check verifier logs for proxy-related messages when fetching external resources:
+
+```bash
+# Watch verifier logs
+docker logs -f verifier-backend
+
+# Look for trust list refresh events
+# The logs should indicate proxy usage if configured correctly
+```
+
+### Test Trust List Fetch Through Proxy
+
+Trigger a trust list refresh and verify it goes through the proxy:
+
+```bash
+# If your proxy logs requests, check proxy logs
+tail -f /var/log/proxy/access.log
+
+# Look for requests to trust list URLs
+# Example: GET https://preprod.pki.eudiw.dev/tl.xml
+```
+
+## Common Proxy Types
+
+### Forward Proxy
+
+Most common type, used for outbound internet access:
+
+```bash
+VERIFIER_HTTP_PROXY_URL=http://forward-proxy.company.com:8080
+VERIFIER_HTTP_PROXY_USERNAME=user
+VERIFIER_HTTP_PROXY_PASSWORD=pass
+```
+
+### Authenticated Proxy
+
+Proxy requiring Basic authentication:
+
+```bash
+VERIFIER_HTTP_PROXY_URL=http://auth-proxy.example.com:8080
+VERIFIER_HTTP_PROXY_USERNAME=domain\user
+VERIFIER_HTTP_PROXY_PASSWORD=password123
+```
+
+### SSL/TLS Proxy
+
+Proxy using encrypted connections:
+
+```bash
+VERIFIER_HTTP_PROXY_URL=https://ssl-proxy.example.com:8443
+VERIFIER_HTTP_PROXY_USERNAME=user
+VERIFIER_HTTP_PROXY_PASSWORD=pass
+```
+
+## Security Best Practices
+
+<AccordionGroup>
+  <Accordion title="Secure Proxy Credentials">
+    Never hardcode proxy passwords in configuration files. Use environment variables, secrets management, or encrypted configuration.
+    
+    ```yaml
+    # Good - using secrets
+    secrets:
+      - proxy_password
+    
+    # Bad - hardcoded password
+    environment:
+      VERIFIER_HTTP_PROXY_PASSWORD: "hardcodedPassword123"
+    ```
+  </Accordion>
+  
+  <Accordion title="Use HTTPS for Proxy Connection">
+    When possible, use `https://` for the proxy URL to encrypt traffic between the verifier and proxy.
+    
+    ```bash
+    # Preferred
+    VERIFIER_HTTP_PROXY_URL=https://proxy.example.com:8443
+    
+    # Less secure
+    VERIFIER_HTTP_PROXY_URL=http://proxy.example.com:8080
+    ```
+  </Accordion>
+  
+  <Accordion title="Restrict Proxy Access">
+    Configure the proxy to only allow connections from the verifier service and only to necessary destinations.
+    
+    Example proxy ACL:
+    ```
+    # Allow only verifier IP
+    acl verifier_ip src 10.0.0.50
+    
+    # Allow only necessary domains
+    acl allowed_domains dstdomain .pki.eudiw.dev .metadata.example.com
+    
+    # Apply rules
+    http_access allow verifier_ip allowed_domains
+    http_access deny all
+    ```
+  </Accordion>
+  
+  <Accordion title="Monitor Proxy Usage">
+    Enable proxy logging and monitor for:
+    - Unauthorized access attempts
+    - Unusual traffic patterns
+    - Failed authentication attempts
+    - Connections to unexpected destinations
+  </Accordion>
+  
+  <Accordion title="Use Dedicated Proxy Credentials">
+    Create dedicated credentials for the verifier service with minimal required permissions.
+    
+    ```bash
+    # Dedicated account
+    VERIFIER_HTTP_PROXY_USERNAME=verifier-service
+    
+    # Not a shared or admin account
+    VERIFIER_HTTP_PROXY_USERNAME=admin
+    ```
+  </Accordion>
+  
+  <Accordion title="Rotate Proxy Credentials">
+    Implement a credential rotation policy for proxy authentication.
+  </Accordion>
+  
+  <Accordion title="Validate Proxy Certificates">
+    If using HTTPS proxy, ensure the proxy certificate is valid and trusted.
+  </Accordion>
+</AccordionGroup>
+
+## Proxy Configuration by Use Case
+
+### Development Environment
+
+```bash
+# No proxy or simple proxy without authentication
+VERIFIER_HTTP_PROXY_URL=http://localhost:8888
+```
+
+### Corporate Network
+
+```bash
+# Authenticated corporate proxy
+VERIFIER_HTTP_PROXY_URL=http://proxy.corp.company.com:3128
+VERIFIER_HTTP_PROXY_USERNAME=company\verifier-svc
+VERIFIER_HTTP_PROXY_PASSWORD=${PROXY_PASSWORD}
+```
+
+### Cloud Environment
+
+```bash
+# NAT gateway or cloud proxy
+VERIFIER_HTTP_PROXY_URL=http://nat-proxy.cloud.internal:8080
+VERIFIER_HTTP_PROXY_USERNAME=service-account
+VERIFIER_HTTP_PROXY_PASSWORD=${CLOUD_PROXY_SECRET}
+```
+
+### High Security Environment
+
+```bash
+# SSL proxy with authentication and restricted access
+VERIFIER_HTTP_PROXY_URL=https://secure-proxy.dmz.company.com:8443
+VERIFIER_HTTP_PROXY_USERNAME=verifier-prod
+VERIFIER_HTTP_PROXY_PASSWORD=${SECURE_PROXY_PASSWORD}
+```
+
+## Troubleshooting
+
+### Cannot Connect to External Services
+
+**Problem:** Verifier cannot fetch trust lists or type metadata.
+
+**Solutions:**
+1. Verify proxy URL is correct and reachable
+2. Check proxy credentials are valid
+3. Ensure proxy allows connections to required domains
+4. Check network connectivity between verifier and proxy
+5. Review proxy logs for denied requests
+
+### Authentication Failures
+
+**Problem:** Proxy returns 407 Proxy Authentication Required.
+
+**Solutions:**
+1. Verify username and password are correct
+2. Check if username requires domain prefix (e.g., `domain\user`)
+3. Ensure password doesn't contain special characters that need escaping
+4. Verify account is not locked or expired
+
+### SSL/TLS Errors
+
+**Problem:** Certificate validation errors when using HTTPS proxy.
+
+**Solutions:**
+1. Import proxy certificate into verifier's trust store
+2. Verify proxy certificate is not expired
+3. Check if proxy is using self-signed certificate
+4. Consider using `self-signed` profile if appropriate:
+   ```bash
+   SPRING_PROFILES_ACTIVE=self-signed
+   ```
+
+### Slow Performance
+
+**Problem:** Requests through proxy are slow.
+
+**Solutions:**
+1. Check proxy server performance and load
+2. Verify network latency between verifier and proxy
+3. Consider caching at proxy level
+4. Review proxy configuration for bottlenecks
+5. Check if proxy is doing additional processing (scanning, filtering)
+
+### Proxy Bypassed
+
+**Problem:** Verifier not using configured proxy.
+
+**Solutions:**
+1. Verify `VERIFIER_HTTP_PROXY_URL` is set correctly
+2. Check for environment variable typos
+3. Ensure configuration is loaded (check application logs on startup)
+4. Verify no other proxy configuration is overriding settings
+5. Test with simple proxy like `http://localhost:8888`

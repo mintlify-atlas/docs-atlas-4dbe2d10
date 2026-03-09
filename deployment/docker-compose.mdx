@@ -1,0 +1,553 @@
+---
+title: Docker Compose Deployment
+description: Deploy the complete EUDI Verifier stack with Docker Compose
+---
+
+## Overview
+
+The Docker Compose deployment provides a complete verifier stack with three services:
+
+- **verifier**: The backend API endpoint (port 8080)
+- **verifier-ui**: The web interface (port 4300)
+- **haproxy**: SSL termination reverse proxy (port 443)
+
+This setup is ideal for development, testing, and production deployments requiring HTTPS.
+
+## Prerequisites
+
+- Docker and Docker Compose installed
+- SSL certificate for HTTPS (or use the provided self-signed certificate for testing)
+- Basic understanding of Docker networking
+
+## Quick Start
+
+<Steps>
+  <Step title="Navigate to the docker directory">
+    ```bash
+    cd docker
+    ```
+  </Step>
+
+  <Step title="Start all services">
+    ```bash
+    docker-compose up -d
+    ```
+
+    This command will:
+    - Pull the latest images from GitHub Container Registry
+    - Start all three services
+    - Configure networking between containers
+    - Expose port 443 for HTTPS access
+  </Step>
+
+  <Step title="Verify services are running">
+    ```bash
+    docker-compose ps
+    ```
+
+    You should see all three services in "Up" state.
+  </Step>
+
+  <Step title="Access the application">
+    Open your browser to `https://localhost` (accept the self-signed certificate warning for development)
+  </Step>
+</Steps>
+
+## Service Configuration
+
+### Complete docker-compose.yaml
+
+```yaml docker-compose.yaml
+version: '3.3'
+
+services:
+  verifier:
+    image: ghcr.io/eu-digital-identity-wallet/av-srv-web-verifier-endpoint-23220-4-kt:latest
+    container_name: verifier-backend
+    ports:
+      - "8080:8080"
+
+  verifier-ui:
+    image: ghcr.io/eu-digital-identity-wallet/eudi-web-verifier:latest
+    container_name: verifier-ui
+    ports:
+      - "4300:4300"
+    environment:
+      - DOMAIN_NAME=""
+      - HOST_API="http://localhost:8080"
+
+  haproxy:
+    image: haproxy:2.7.2
+    container_name: haproxy
+    ports:
+      - "443:443"
+    volumes:
+      - ./haproxy.conf:/usr/local/etc/haproxy/haproxy.cfg
+      - ./haproxy.pem:/etc/ssl/certs/mysite.pem
+```
+
+## Verifier Backend Service
+
+### Basic Configuration
+
+The verifier service runs the backend API that handles OpenID4VP authorization requests.
+
+<CodeGroup>
+```yaml Default
+verifier:
+  image: ghcr.io/eu-digital-identity-wallet/av-srv-web-verifier-endpoint-23220-4-kt:latest
+  container_name: verifier-backend
+  ports:
+    - "8080:8080"
+```
+
+```yaml With Environment Variables
+verifier:
+  image: ghcr.io/eu-digital-identity-wallet/av-srv-web-verifier-endpoint-23220-4-kt:latest
+  container_name: verifier-backend
+  ports:
+    - "8080:8080"
+  environment:
+    VERIFIER_PUBLICURL: "https://10.240.174.10"
+    VERIFIER_RESPONSE_MODE: "DirectPost"
+    VERIFIER_REQUESTJWT_EMBED: "ByReference"
+    VERIFIER_JAR_SIGNING_KEY: "GenerateRandom"
+    SERVER_PORT: "8080"
+```
+
+```yaml With External Keystore
+verifier:
+  image: ghcr.io/eu-digital-identity-wallet/av-srv-web-verifier-endpoint-23220-4-kt:latest
+  container_name: verifier-backend
+  ports:
+    - "8080:8080"
+  environment:
+    VERIFIER_PUBLICURL: "https://10.240.174.10"
+    VERIFIER_RESPONSE_MODE: "DirectPost"
+    VERIFIER_JAR_SIGNING_KEY: "LoadFromKeystore"
+    VERIFIER_JAR_SIGNING_KEY_KEYSTORE: "file:///certs/keystore.jks"
+    VERIFIER_JAR_SIGNING_KEY_KEYSTORE_TYPE: "jks"
+    VERIFIER_JAR_SIGNING_KEY_KEYSTORE_PASSWORD: "changeit"
+    VERIFIER_JAR_SIGNING_KEY_ALIAS: "verifier"
+    VERIFIER_JAR_SIGNING_KEY_PASSWORD: "changeit"
+  volumes:
+    - ./keystore.jks:/certs/keystore.jks
+```
+</CodeGroup>
+
+### Environment Variables
+
+<ParamField path="VERIFIER_PUBLICURL" type="string" required>
+  The public URL where the verifier is accessible
+  
+  **Example:** `https://verifier.example.com` or `https://10.240.174.10`
+</ParamField>
+
+<ParamField path="VERIFIER_RESPONSE_MODE" type="string" default="DirectPostJwt">
+  How authorization responses are expected
+  
+  **Options:**
+  - `DirectPost` - Plain form post
+  - `DirectPostJwt` - Encrypted JWT response
+</ParamField>
+
+<ParamField path="VERIFIER_REQUESTJWT_EMBED" type="string" default="ByReference">
+  How authorization requests are provided
+  
+  **Options:**
+  - `ByValue` - Request passed inline
+  - `ByReference` - Request passed via request_uri
+</ParamField>
+
+<ParamField path="VERIFIER_JAR_SIGNING_KEY" type="string" default="GenerateRandom">
+  Signing key configuration
+  
+  **Options:**
+  - `GenerateRandom` - Generate ephemeral EC P-256 key
+  - `LoadFromKeystore` - Load from external keystore
+</ParamField>
+
+<ParamField path="VERIFIER_MAXAGE" type="duration" default="PT6400M">
+  Time-to-live of an authorization request
+  
+  **Example:** `PT30M` (30 minutes), `PT2H` (2 hours)
+</ParamField>
+
+<ParamField path="CORS_ORIGINS" type="string" default="*">
+  Comma-separated list of allowed CORS origins
+  
+  **Example:** `https://frontend.example.com,https://app.example.com`
+</ParamField>
+
+### Trust Source Configuration
+
+Configure trusted certificate sources for credential validation:
+
+```yaml
+verifier:
+  image: ghcr.io/eu-digital-identity-wallet/av-srv-web-verifier-endpoint-23220-4-kt:latest
+  container_name: verifier-backend
+  ports:
+    - "8080:8080"
+  environment:
+    # Trust source pattern
+    VERIFIER_TRUSTSOURCES_0_PATTERN: "eu.europa.ec.eudi.pid.*|urn:eu.europa.ec.eudi:pid:.*"
+    
+    # Trust List configuration
+    VERIFIER_TRUSTSOURCES_0_TL_LOCATION: "https://example.com/trust-list.xml"
+    VERIFIER_TRUSTSOURCES_0_TL_REFRESHINTERVAL: "0 0 */4 * * *"
+    VERIFIER_TRUSTSOURCES_0_TL_SERVICETYPEFILTER: "PIDProvider"
+```
+
+## Verifier UI Service
+
+The frontend web interface for the verifier.
+
+```yaml
+verifier-ui:
+  image: ghcr.io/eu-digital-identity-wallet/eudi-web-verifier:latest
+  container_name: verifier-ui
+  ports:
+    - "4300:4300"
+  environment:
+    - DOMAIN_NAME=""
+    - HOST_API="http://localhost:8080"
+```
+
+<ParamField path="HOST_API" type="string" required>
+  URL of the verifier backend API
+  
+  **In Docker Compose:** Use the service name: `http://verifier-backend:8080`
+  
+  **External access:** Use the public URL: `http://localhost:8080`
+</ParamField>
+
+<ParamField path="DOMAIN_NAME" type="string">
+  Domain name for the UI (optional)
+</ParamField>
+
+## HAProxy Service
+
+HAProxy provides SSL termination and reverse proxy functionality.
+
+### Default Configuration
+
+```yaml
+haproxy:
+  image: haproxy:2.7.2
+  container_name: haproxy
+  ports:
+    - "443:443"
+  volumes:
+    - ./haproxy.conf:/usr/local/etc/haproxy/haproxy.cfg
+    - ./haproxy.pem:/etc/ssl/certs/mysite.pem
+```
+
+### HAProxy Configuration File
+
+The `haproxy.conf` file defines routing rules:
+
+```conf haproxy.conf
+global
+    maxconn 50000
+    log stdout format raw local0
+    user haproxy
+    group haproxy
+    nbthread 4
+    cpu-map auto:1/1-4 0-3
+
+defaults
+    timeout connect 10s
+    timeout client 30s
+    timeout server 30s
+    log global
+    mode http
+    option httplog
+    maxconn 3000
+
+frontend all_https_frontend
+    bind *:443 ssl crt /etc/ssl/certs/mysite.pem
+    use_backend verifier-backend if { path_beg /utilities/ }
+    use_backend verifier-backend if { path_beg /ui/ }
+    use_backend verifier-backend if { path_beg /wallet/ }
+    default_backend verifier-ui
+
+backend verifier-backend
+    balance roundrobin
+    cookie SERVERUSED insert indirect nocache
+    server server1 verifier-backend:8080 cookie server1
+
+backend verifier-ui
+    balance roundrobin
+    cookie SERVERUSED insert indirect nocache
+    server server1 verifier-ui:4300 cookie server1
+```
+
+### Routing Rules
+
+HAProxy routes requests based on URL paths:
+
+| Path Pattern | Backend Service | Description |
+|--------------|-----------------|-------------|
+| `/utilities/*` | verifier-backend | Utility endpoints |
+| `/ui/*` | verifier-backend | Verifier API |
+| `/wallet/*` | verifier-backend | Wallet API |
+| `/*` (default) | verifier-ui | Frontend UI |
+
+### SSL Certificate Configuration
+
+<Steps>
+  <Step title="Generate SSL certificate (for testing)">
+    ```bash
+    openssl req -x509 -newkey rsa:4096 -nodes \
+      -keyout key.pem -out cert.pem -days 365 \
+      -subj "/CN=localhost"
+    
+    cat cert.pem key.pem > haproxy.pem
+    ```
+  </Step>
+
+  <Step title="Use production certificate">
+    Combine your certificate and private key:
+    
+    ```bash
+    cat your-cert.pem your-key.pem > haproxy.pem
+    ```
+  </Step>
+
+  <Step title="Update docker-compose.yaml">
+    Ensure the certificate is mounted:
+    
+    ```yaml
+    haproxy:
+      volumes:
+        - ./haproxy.pem:/etc/ssl/certs/mysite.pem
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+  The HAProxy certificate file must contain both the certificate and private key in PEM format, concatenated together.
+</Warning>
+
+## Managing Services
+
+### Starting Services
+
+<CodeGroup>
+```bash Start All
+docker-compose up -d
+```
+
+```bash Start Specific Service
+docker-compose up -d verifier
+```
+
+```bash View Logs
+docker-compose logs -f
+```
+
+```bash View Service Logs
+docker-compose logs -f verifier
+```
+</CodeGroup>
+
+### Stopping Services
+
+<CodeGroup>
+```bash Stop All
+docker-compose down
+```
+
+```bash Stop but Keep Volumes
+docker-compose stop
+```
+
+```bash Remove Everything
+docker-compose down -v
+```
+</CodeGroup>
+
+### Updating Services
+
+<Steps>
+  <Step title="Pull latest images">
+    ```bash
+    docker-compose pull
+    ```
+  </Step>
+
+  <Step title="Restart services">
+    ```bash
+    docker-compose up -d
+    ```
+    
+    Docker Compose will recreate containers with updated images.
+  </Step>
+</Steps>
+
+## Networking
+
+Docker Compose creates a default network for service communication:
+
+- Services communicate using service names as hostnames
+- `verifier-backend` is accessible at `http://verifier-backend:8080`
+- `verifier-ui` is accessible at `http://verifier-ui:4300`
+
+### Custom Network
+
+```yaml
+version: '3.3'
+
+networks:
+  verifier-network:
+    driver: bridge
+
+services:
+  verifier:
+    networks:
+      - verifier-network
+  
+  verifier-ui:
+    networks:
+      - verifier-network
+  
+  haproxy:
+    networks:
+      - verifier-network
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Services won't start">
+    Check if ports are already in use:
+    
+    ```bash
+    # Check port 443
+    sudo lsof -i :443
+    
+    # Check port 8080
+    sudo lsof -i :8080
+    ```
+    
+    Modify port mappings in `docker-compose.yaml` if needed.
+  </Accordion>
+
+  <Accordion title="Certificate errors">
+    Verify the HAProxy certificate file format:
+    
+    ```bash
+    # Should show certificate details
+    openssl x509 -in haproxy.pem -text -noout
+    
+    # Should show private key details
+    openssl rsa -in haproxy.pem -check -noout
+    ```
+  </Accordion>
+
+  <Accordion title="Service can't connect to backend">
+    Check service names and network connectivity:
+    
+    ```bash
+    # Execute shell in verifier-ui container
+    docker exec -it verifier-ui sh
+    
+    # Try to reach backend
+    wget -O- http://verifier-backend:8080/actuator/health
+    ```
+  </Accordion>
+
+  <Accordion title="HAProxy routing issues">
+    View HAProxy logs:
+    
+    ```bash
+    docker-compose logs haproxy
+    ```
+    
+    Test backend connectivity from HAProxy:
+    
+    ```bash
+    docker exec haproxy wget -O- http://verifier-backend:8080/actuator/health
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Viewing Logs
+
+```bash
+# All services
+docker-compose logs -f
+
+# Specific service
+docker-compose logs -f verifier
+
+# With timestamps
+docker-compose logs -t verifier
+
+# Last 100 lines
+docker-compose logs --tail=100 verifier
+```
+
+### Checking Service Health
+
+```bash
+# Service status
+docker-compose ps
+
+# Detailed service info
+docker-compose ps verifier
+
+# Resource usage
+docker stats
+```
+
+## Production Considerations
+
+<CardGroup cols={2}>
+  <Card title="Use Production Images" icon="docker">
+    Pin specific version tags instead of `latest`:
+    
+    ```yaml
+    image: ghcr.io/.../verifier:v1.2.3
+    ```
+  </Card>
+
+  <Card title="Configure Resource Limits" icon="memory">
+    Set memory and CPU limits:
+    
+    ```yaml
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+    ```
+  </Card>
+
+  <Card title="Use Valid SSL Certificates" icon="lock">
+    Replace self-signed certificates with valid ones from a trusted CA.
+  </Card>
+
+  <Card title="Enable Monitoring" icon="chart-line">
+    Add health checks and monitoring:
+    
+    ```yaml
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    ```
+  </Card>
+</CardGroup>
+
+<Note>
+  For production deployments, consider using orchestration platforms like Kubernetes or managed services like Azure Container Apps. See the [Azure deployment guide](/deployment/azure) for cloud deployment options.
+</Note>
+
+## Next Steps
+
+- Explore [Configuration options](/configuration/environment-variables)
+- Learn about [Azure deployment](/deployment/azure)
+- Review [API endpoints](/api-reference/verifier-api)

@@ -1,0 +1,278 @@
+---
+title: "Get Presentation Events"
+description: "Retrieve the event log for a presentation transaction for debugging and monitoring"
+---
+
+## Endpoint
+
+```
+GET /ui/presentations/{transactionId}/events
+```
+
+This endpoint returns a chronological log of notable events that occurred during a presentation transaction. Use this for debugging, monitoring, and auditing presentation flows.
+
+## Path Parameters
+
+<ParamField path="transactionId" type="string" required>
+  The unique identifier of the presentation transaction, obtained from the [Initialize Transaction](/api/verifier/initialize-transaction) endpoint response.
+</ParamField>
+
+## Response
+
+<ResponseField name="transaction_id" type="string" required>
+  The transaction identifier for which events are being returned.
+</ResponseField>
+
+<ResponseField name="last_updated" type="number" required>
+  Unix timestamp (in milliseconds) of the most recent event in the log. Use this to determine when the transaction was last modified.
+</ResponseField>
+
+<ResponseField name="events" type="array" required>
+  Array of event objects in chronological order. Each event represents a significant state change or action in the presentation flow.
+  
+  <Expandable title="Event Structure">
+    Each event is a JSON object with the following common fields:
+    
+    <ResponseField name="type" type="string">
+      The type of event that occurred. Common event types include:
+      - `TransactionInitialized` - Transaction created
+      - `RequestObjectRetrieved` - Wallet retrieved the authorization request
+      - `WalletResponseReceived` - Wallet submitted credentials
+      - `ResponseValidated` - Credential validation completed
+      - `TransactionCompleted` - Transaction finished successfully
+      - `TransactionFailed` - Transaction ended with an error
+    </ResponseField>
+    
+    <ResponseField name="timestamp" type="number">
+      Unix timestamp (in milliseconds) when the event occurred.
+    </ResponseField>
+    
+    <ResponseField name="details" type="object">
+      Additional event-specific information. Structure varies by event type.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Response Status Codes
+
+<ResponseField name="200" type="status">
+  **OK** - Events retrieved successfully.
+</ResponseField>
+
+<ResponseField name="404" type="status">
+  **Not Found** - No transaction found with the specified `transactionId`.
+</ResponseField>
+
+<ResponseField name="400" type="status">
+  **Bad Request** - Invalid transaction state or malformed request.
+</ResponseField>
+
+## Example
+
+### Request
+
+```bash
+curl http://localhost:8080/ui/presentations/5N6E7VZsmwXOGLz1Xlfi96MoyZVC3FZxwdAuJ26DnGcan-vYs-VAKErioQ58BWEsKlVw2_X49jpZHyp0Mk9nKw/events
+```
+
+### Successful Response
+
+<ResponseExample>
+```json
+{
+  "transaction_id": "5N6E7VZsmwXOGLz1Xlfi96MoyZVC3FZxwdAuJ26DnGcan-vYs-VAKErioQ58BWEsKlVw2_X49jpZHyp0Mk9nKw",
+  "last_updated": 1710000000000,
+  "events": [
+    {
+      "type": "TransactionInitialized",
+      "timestamp": 1709999990000,
+      "details": {
+        "response_mode": "direct_post",
+        "jar_mode": "by_reference",
+        "credential_count": 1
+      }
+    },
+    {
+      "type": "RequestObjectRetrieved",
+      "timestamp": 1709999995000,
+      "details": {
+        "request_id": "abc123xyz",
+        "method": "POST"
+      }
+    },
+    {
+      "type": "WalletResponseReceived",
+      "timestamp": 1709999998000,
+      "details": {
+        "response_mode": "direct_post",
+        "has_vp_token": true
+      }
+    },
+    {
+      "type": "ResponseValidated",
+      "timestamp": 1709999999000,
+      "details": {
+        "validation_result": "success",
+        "credentials_validated": 1,
+        "all_trusted": true
+      }
+    },
+    {
+      "type": "TransactionCompleted",
+      "timestamp": 1710000000000,
+      "details": {
+        "status": "success"
+      }
+    }
+  ]
+}
+```
+</ResponseExample>
+
+### Failed Transaction Example
+
+<ResponseExample>
+```json
+{
+  "transaction_id": "5N6E7VZsmwXOGLz1Xlfi96MoyZVC3FZxwdAuJ26DnGcan-vYs-VAKErioQ58BWEsKlVw2_X49jpZHyp0Mk9nKw",
+  "last_updated": 1710000005000,
+  "events": [
+    {
+      "type": "TransactionInitialized",
+      "timestamp": 1709999990000,
+      "details": {
+        "response_mode": "direct_post.jwt",
+        "jar_mode": "by_reference"
+      }
+    },
+    {
+      "type": "RequestObjectRetrieved",
+      "timestamp": 1709999995000,
+      "details": {
+        "request_id": "def456uvw",
+        "method": "GET"
+      }
+    },
+    {
+      "type": "WalletResponseReceived",
+      "timestamp": 1710000000000,
+      "details": {
+        "response_mode": "direct_post.jwt",
+        "has_error": true,
+        "error_code": "access_denied"
+      }
+    },
+    {
+      "type": "TransactionFailed",
+      "timestamp": 1710000005000,
+      "details": {
+        "reason": "User denied authorization",
+        "error_code": "access_denied"
+      }
+    }
+  ]
+}
+```
+</ResponseExample>
+
+### Transaction Not Found
+
+<ResponseExample>
+```json Status 404
+{
+  "error": "not_found",
+  "message": "No transaction found with the specified ID"
+}
+```
+</ResponseExample>
+
+## Common Event Types
+
+The events array can contain various event types depending on the presentation flow:
+
+### Transaction Lifecycle Events
+
+- **TransactionInitialized** - Created via [Initialize Transaction](/api/verifier/initialize-transaction)
+- **TransactionCompleted** - Successfully finished
+- **TransactionFailed** - Ended with an error
+- **TransactionExpired** - Timed out before completion
+
+### Authorization Request Events
+
+- **RequestObjectRetrieved** - Wallet fetched the JAR (JWT-secured Authorization Request)
+- **RequestObjectFailed** - Failed to retrieve or validate the authorization request
+
+### Wallet Response Events
+
+- **WalletResponseReceived** - Wallet posted its authorization response
+- **ResponseValidated** - Credential validation and trust checks completed
+- **ResponseRejected** - Response failed validation
+
+### Error Events
+
+- **ValidationError** - Credential or signature validation failed
+- **TrustError** - Issuer trust verification failed
+- **ProtocolError** - OpenID4VP protocol violation
+
+## Use Cases
+
+### Debugging Failed Transactions
+
+When a presentation fails, check the event log to identify where in the flow the failure occurred:
+
+```bash
+curl http://localhost:8080/ui/presentations/{transactionId}/events
+```
+
+Look for events with type ending in "Failed" or "Error" to pinpoint the issue.
+
+### Monitoring Transaction Progress
+
+Poll this endpoint to track the progress of a long-running transaction:
+
+- Check if the wallet has retrieved the request
+- Monitor when the wallet submits its response
+- Verify validation completed successfully
+
+### Audit Logging
+
+Store event logs for compliance and audit purposes. The `last_updated` timestamp helps determine if new events have occurred since the last check.
+
+### Analytics
+
+Analyze event patterns across multiple transactions to:
+- Measure average time between events
+- Identify common failure points
+- Track wallet retrieval rates
+- Monitor validation success rates
+
+## Best Practices
+
+<Note>
+**Event Retention**: Events are stored for the lifetime of the transaction. Configure transaction retention policies in your deployment to manage storage.
+</Note>
+
+<Tip>
+**Real-time Monitoring**: Consider polling this endpoint every 1-2 seconds during active transactions to provide real-time feedback to users.
+</Tip>
+
+<Warning>
+**Sensitive Data**: Event logs may contain transaction metadata but should never include actual credential values or personally identifiable information from presentations.
+</Warning>
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Initialize Transaction" icon="play" href="/api/verifier/initialize-transaction">
+    Create a new presentation transaction
+  </Card>
+  <Card title="Get Wallet Response" icon="arrow-down-to-bracket" href="/api/verifier/get-wallet-response">
+    Retrieve the wallet's authorization response
+  </Card>
+</CardGroup>
+
+## See Also
+
+- [Transactions](/concepts/transactions) - Understanding transaction lifecycle
+- [Presentation Flows](/concepts/presentation-flows) - Same-device and cross-device flows
+- Source: [VerifierApi.kt:104-115](https://github.com/eu-digital-identity-wallet/av-srv-web-verifier-endpoint-23220-4-kt/blob/main/src/main/kotlin/eu/europa/ec/eudi/verifier/endpoint/adapter/input/web/VerifierApi.kt#L104-L115)

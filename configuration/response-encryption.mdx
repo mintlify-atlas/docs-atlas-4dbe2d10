@@ -1,0 +1,235 @@
+---
+title: 'Response Encryption Configuration'
+description: 'Configure encryption for authorization responses from wallets'
+---
+
+The EUDI Verifier Endpoint supports encrypted authorization responses from wallets. This page explains how to configure the encryption algorithms and methods that the verifier advertises and supports.
+
+## Overview
+
+When using `DirectPostJwt` response mode, wallet responses are encrypted using JWE (JSON Web Encryption). The verifier advertises its supported encryption capabilities in its client metadata.
+
+<Info>
+  Response encryption is automatically used when `VERIFIER_RESPONSE_MODE` is set to `DirectPostJwt`.
+</Info>
+
+## Encryption Algorithm
+
+<ParamField path="VERIFIER_CLIENTMETADATA_RESPONSEENCRYPTION_ALGORITHM" type="string" default="ECDH-ES" required>
+  Algorithm that verifier is advertising and supports for authorization response encryption.
+  
+  **Possible values:**
+  - `ECDH-ES` - Elliptic Curve Diffie-Hellman Ephemeral Static key agreement (default)
+  - `ECDH-ES+A128KW` - ECDH-ES with AES 128-bit Key Wrap
+  - `ECDH-ES+A192KW` - ECDH-ES with AES 192-bit Key Wrap
+  - `ECDH-ES+A256KW` - ECDH-ES with AES 256-bit Key Wrap
+</ParamField>
+
+### Algorithm Comparison
+
+| Algorithm | Type | Key Wrap | Performance | Security |
+|-----------|------|----------|-------------|----------|
+| `ECDH-ES` | Direct Agreement | No | Fastest | High |
+| `ECDH-ES+A128KW` | Key Agreement with KW | Yes | Moderate | High |
+| `ECDH-ES+A192KW` | Key Agreement with KW | Yes | Moderate | Higher |
+| `ECDH-ES+A256KW` | Key Agreement with KW | Yes | Moderate | Highest |
+
+<Tip>
+  `ECDH-ES` is recommended for most use cases as it provides strong security with better performance.
+</Tip>
+
+## Encryption Method
+
+<ParamField path="VERIFIER_CLIENTMETADATA_RESPONSEENCRYPTION_METHOD" type="string" default="A128GCM" required>
+  Method that verifier is advertising and supports for authorization response encryption.
+  
+  **Possible values:**
+  - `A128CBC-HS256` - AES 128-bit CBC with HMAC SHA-256
+  - `A192CBC-HS384` - AES 192-bit CBC with HMAC SHA-384
+  - `A256CBC-HS512` - AES 256-bit CBC with HMAC SHA-512
+  - `A128GCM` - AES 128-bit GCM (default)
+  - `A192GCM` - AES 192-bit GCM
+  - `A256GCM` - AES 256-bit GCM
+  - `XC20P` - XChaCha20-Poly1305
+</ParamField>
+
+### Method Comparison
+
+| Method | Mode | Key Size | Authentication | Performance | Security |
+|--------|------|----------|----------------|-------------|----------|
+| `A128CBC-HS256` | CBC | 128-bit | HMAC | Moderate | Good |
+| `A192CBC-HS384` | CBC | 192-bit | HMAC | Moderate | Better |
+| `A256CBC-HS512` | CBC | 256-bit | HMAC | Moderate | Best |
+| `A128GCM` | GCM | 128-bit | Native | Fast | High |
+| `A192GCM` | GCM | 192-bit | Native | Fast | Higher |
+| `A256GCM` | GCM | 256-bit | Native | Fast | Highest |
+| `XC20P` | Stream | 256-bit | Native | Very Fast | High |
+
+<Tip>
+  GCM modes (`A128GCM`, `A192GCM`, `A256GCM`) are recommended for their combination of security and performance. They provide authenticated encryption in a single operation.
+</Tip>
+
+## Configuration Examples
+
+### Default Configuration (Recommended)
+
+```bash
+VERIFIER_RESPONSE_MODE=DirectPostJwt
+VERIFIER_CLIENTMETADATA_RESPONSEENCRYPTION_ALGORITHM=ECDH-ES
+VERIFIER_CLIENTMETADATA_RESPONSEENCRYPTION_METHOD=A128GCM
+```
+
+This configuration provides strong security with good performance.
+
+### High Security Configuration
+
+```bash
+VERIFIER_RESPONSE_MODE=DirectPostJwt
+VERIFIER_CLIENTMETADATA_RESPONSEENCRYPTION_ALGORITHM=ECDH-ES+A256KW
+VERIFIER_CLIENTMETADATA_RESPONSEENCRYPTION_METHOD=A256GCM
+```
+
+Use this for environments requiring maximum security.
+
+### High Performance Configuration
+
+```bash
+VERIFIER_RESPONSE_MODE=DirectPostJwt
+VERIFIER_CLIENTMETADATA_RESPONSEENCRYPTION_ALGORITHM=ECDH-ES
+VERIFIER_CLIENTMETADATA_RESPONSEENCRYPTION_METHOD=XC20P
+```
+
+Optimized for performance while maintaining strong security.
+
+### CBC-based Configuration
+
+```bash
+VERIFIER_RESPONSE_MODE=DirectPostJwt
+VERIFIER_CLIENTMETADATA_RESPONSEENCRYPTION_ALGORITHM=ECDH-ES+A128KW
+VERIFIER_CLIENTMETADATA_RESPONSEENCRYPTION_METHOD=A256CBC-HS512
+```
+
+For compatibility with systems that don't support GCM.
+
+## Response Mode Comparison
+
+| Response Mode | Encryption | Integrity | Use Case |
+|---------------|------------|-----------|----------|
+| `DirectPost` | None | None | Development only |
+| `DirectPostJwt` | Yes | Yes | Production (recommended) |
+
+<Warning>
+  `DirectPost` mode sends responses in plain text. Always use `DirectPostJwt` in production environments.
+</Warning>
+
+## Docker Compose Example
+
+```yaml
+verifier:
+  image: ghcr.io/eu-digital-identity-wallet/eudi-srv-web-verifier-endpoint-23220-4-kt:latest
+  container_name: verifier-backend
+  ports:
+    - "8080:8080"
+  environment:
+    VERIFIER_PUBLICURL: "https://verifier.example.com"
+    VERIFIER_RESPONSE_MODE: "DirectPostJwt"
+    VERIFIER_CLIENTMETADATA_RESPONSEENCRYPTION_ALGORITHM: "ECDH-ES"
+    VERIFIER_CLIENTMETADATA_RESPONSEENCRYPTION_METHOD: "A256GCM"
+```
+
+## Algorithm Selection Guide
+
+<AccordionGroup>
+  <Accordion title="When to use ECDH-ES">
+    Use `ECDH-ES` for most production deployments. It offers:
+    - Best performance
+    - Strong security
+    - Wide compatibility
+    - Simpler key management (no key wrapping)
+  </Accordion>
+  
+  <Accordion title="When to use ECDH-ES+A256KW">
+    Use `ECDH-ES+A256KW` when:
+    - Maximum security is required
+    - Compliance mandates key wrapping
+    - Additional key derivation layer is needed
+    - Performance is not critical
+  </Accordion>
+  
+  <Accordion title="When to use A128GCM">
+    Use `A128GCM` (default) when:
+    - You need a balance of security and performance
+    - Standard compliance is required
+    - Hardware acceleration is available
+  </Accordion>
+  
+  <Accordion title="When to use A256GCM">
+    Use `A256GCM` when:
+    - Maximum security is required
+    - Processing overhead is acceptable
+    - Long-term confidentiality is needed
+  </Accordion>
+  
+  <Accordion title="When to use XC20P">
+    Use `XC20P` when:
+    - Maximum performance is needed
+    - Modern cryptography is acceptable
+    - Compatibility with ChaCha20 is required
+  </Accordion>
+</AccordionGroup>
+
+## Security Considerations
+
+<AccordionGroup>
+  <Accordion title="Always Use Encrypted Responses in Production">
+    Never use `DirectPost` mode in production. Always configure `DirectPostJwt` with appropriate encryption settings.
+  </Accordion>
+  
+  <Accordion title="Choose Appropriate Key Sizes">
+    For sensitive data, use at least 256-bit encryption methods (A256GCM, A256CBC-HS512).
+  </Accordion>
+  
+  <Accordion title="Verify Wallet Compatibility">
+    Ensure the wallet implementation supports your chosen algorithm and method combinations.
+  </Accordion>
+  
+  <Accordion title="Monitor for Algorithm Updates">
+    Stay informed about cryptographic best practices and update algorithms as needed.
+  </Accordion>
+  
+  <Accordion title="Test Encryption Configuration">
+    Verify that encryption is working correctly by testing with actual wallet responses.
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+### Wallet Cannot Decrypt Response
+
+**Problem:** Wallet fails to decrypt the authorization response.
+
+**Solutions:**
+1. Verify the algorithm and method are supported by the wallet
+2. Check that the verifier's public key is correctly advertised
+3. Ensure the wallet is using the correct encryption parameters
+4. Review logs for specific decryption errors
+
+### Performance Issues
+
+**Problem:** Response encryption is causing performance bottlenecks.
+
+**Solutions:**
+1. Switch to `ECDH-ES` algorithm for better performance
+2. Use `A128GCM` or `XC20P` encryption methods
+3. Enable hardware acceleration if available
+4. Profile the application to identify specific bottlenecks
+
+### Compatibility Issues
+
+**Problem:** Wallet doesn't support configured encryption.
+
+**Solutions:**
+1. Use more widely supported combinations like `ECDH-ES` + `A128GCM`
+2. Check wallet documentation for supported algorithms
+3. Consider using `DirectPost` for development/testing only
+4. Update wallet to support modern encryption methods

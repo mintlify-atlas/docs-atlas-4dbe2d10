@@ -1,80 +1,262 @@
 ---
 title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+description: "Get the EUDI Verifier Endpoint up and running in minutes"
 ---
 
-## Get started in three steps
+Get started with the EUDI Verifier Endpoint by building and running the service locally, then test it with your first verification transaction.
 
-Get your documentation site running locally and make your first customization.
+## Prerequisites
 
-### Step 1: Set up your local environment
+Before you begin, ensure you have the following installed:
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+- **Java 17 or later** - Required for building and running the service
+- **Docker** (optional) - For containerized deployment
+- **Git** - To clone the repository
+
+## Installation
+
+<Steps>
+  <Step title="Clone the repository">
+    Clone the EUDI Verifier Endpoint repository from GitHub:
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    ```bash
+    git clone https://github.com/eu-digital-identity-wallet/av-srv-web-verifier-endpoint-23220-4-kt.git
+    cd av-srv-web-verifier-endpoint-23220-4-kt
+    ```
+  </Step>
+
+  <Step title="Choose your installation method">
+    <CodeGroup>
+      ```bash Gradle (Local Development)
+      # Build and run the service using Gradle
+      ./gradlew bootRun
+      ```
+
+      ```bash Docker Build
+      # Build a Docker image using Gradle
+      ./gradlew bootBuildImage
+      ```
+
+      ```bash Docker Compose
+      # Run the complete verifier stack (backend + UI + proxy)
+      cd docker
+      docker-compose up -d
+      ```
+    </CodeGroup>
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+    <Note>
+      The service will start on **port 8080** by default. You can change this by setting the `SERVER_PORT` environment variable.
+    </Note>
+  </Step>
 
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+  <Step title="Verify the service is running">
+    Once the service starts, you can verify it's running by accessing:
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    - **Swagger UI**: http://localhost:8080/swagger-ui
+    - **Health Check**: http://localhost:8080/actuator/health
+    
+    <Tip>
+      The Swagger UI provides an interactive interface to explore and test all available API endpoints.
+    </Tip>
+  </Step>
+</Steps>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+## Basic Configuration
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+The verifier can be configured using environment variables. Here are the essential settings to get started:
 
-### Step 3: Go live
+```bash
+# Public URL of the verifier (required for production)
+export VERIFIER_PUBLICURL=https://localhost
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+# Response mode: how authorization responses are expected
+export VERIFIER_RESPONSE_MODE=DirectPost
 
-## Next steps
+# Client ID configuration
+export VERIFIER_ORIGINALCLIENTID=Verifier
+export VERIFIER_CLIENTIDPREFIX=pre-registered
 
-Now that you have your docs running, explore these key features:
+# Authorization request signing
+export VERIFIER_JAR_SIGNING_KEY=GenerateRandom
+export VERIFIER_JAR_SIGNING_ALGORITHM=ES256
+```
+
+<Warning>
+  In production, both the Verifier API and Wallet API must be exposed over **HTTPS**. The Verifier API should also be protected to allow only authorized access.
+</Warning>
+
+For a complete list of configuration options, see the [Configuration Overview](/configuration/overview).
+
+## Your First Transaction
+
+Now that the service is running, let's initialize your first verification transaction to request credentials from a wallet.
+
+<Steps>
+  <Step title="Initialize a transaction">
+    Send a POST request to initialize a new verification transaction. This example requests an EU Digital Identity PID credential:
+
+    ```bash
+    curl -X POST http://localhost:8080/ui/presentations \
+      -H "Content-Type: application/json" \
+      -H "Accept: application/json" \
+      -d '{
+        "dcql_query": {
+          "credentials": [
+            {
+              "id": "32f54163-7166-48f1-93d8-ff217bdb0653",
+              "format": "mso_mdoc",
+              "meta": {
+                "doctype_value": "eu.europa.ec.eudi.pid.1"
+              },
+              "claims": [
+                {
+                  "path": ["eu.europa.ec.eudi.pid.1", "family_name"]
+                }
+              ]
+            }
+          ],
+          "credential_sets": [
+            {
+              "options": [
+                ["32f54163-7166-48f1-93d8-ff217bdb0653"]
+              ],
+              "purpose": "We need to verify your identity"
+            }
+          ]
+        },
+        "nonce": "test-nonce-123",
+        "jar_mode": "by_reference",
+        "request_uri_method": "post"
+      }'
+    ```
+
+    <Note>
+      This request uses **DCQL (Digital Credentials Query Language)** to specify which credentials and claims are required.
+    </Note>
+  </Step>
+
+  <Step title="Get the transaction response">
+    The API returns transaction details including the authorization request:
+
+    ```json
+    {
+      "transaction_id": "STMMbidoCQTtyk9id5IcoL8CqdC8rxgks5FF8cqqUrHvw0IL3AaIHGnwxvrvcEyUJ6uUPNdoBQDa7yCqpjtKaw",
+      "client_id": "pre-registered:Verifier",
+      "request_uri": "https://localhost:8080/wallet/request.jwt/5N6E7VZsmwXOGLz1Xlfi96MoyZVC3FZxwdAuJ26DnGcan-vYs-VAKErioQ58BWEsKlVw2_X49jpZHyp0Mk9nKw",
+      "request_uri_method": "post"
+    }
+    ```
+
+    <Tip>
+      Save the `transaction_id` - you'll need it to retrieve the wallet's response later.
+    </Tip>
+  </Step>
+
+  <Step title="Generate a QR code (optional)">
+    For cross-device flows, you can request a QR code instead of JSON by changing the `Accept` header:
+
+    ```bash
+    curl -X POST http://localhost:8080/ui/presentations \
+      -H "Content-Type: application/json" \
+      -H "Accept: image/png" \
+      -d '{
+        "dcql_query": { ... },
+        "nonce": "test-nonce-123",
+        "jar_mode": "by_reference"
+      }' \
+      --output qrcode.png
+    ```
+
+    This generates a PNG image containing the authorization request that can be scanned by a wallet application.
+  </Step>
+
+  <Step title="Retrieve the wallet response">
+    After the wallet submits its response, retrieve it using the transaction ID:
+
+    ```bash
+    curl http://localhost:8080/ui/presentations/{transaction_id}?response_code={response_code}
+    ```
+
+    <Note>
+      The `response_code` parameter is only required for same-device flows. For cross-device flows, you can poll this endpoint until a response is available.
+    </Note>
+  </Step>
+</Steps>
+
+## Docker Compose Deployment
+
+For a complete verifier setup including the UI and SSL termination, use Docker Compose:
+
+```yaml docker/docker-compose.yaml
+version: '3.3'
+
+services:
+  verifier:
+    image: ghcr.io/eu-digital-identity-wallet/av-srv-web-verifier-endpoint-23220-4-kt:latest
+    container_name: verifier-backend
+    ports:
+      - "8080:8080"
+    environment:
+      VERIFIER_PUBLICURL: "https://localhost"
+      VERIFIER_RESPONSE_MODE: "DirectPost"
+      VERIFIER_JAR_SIGNING_KEY: "GenerateRandom"
+
+  verifier-ui:
+    image: ghcr.io/eu-digital-identity-wallet/eudi-web-verifier:latest
+    container_name: verifier-ui
+    ports:
+      - "4300:4300"
+    environment:
+      - HOST_API="http://verifier:8080"
+
+  haproxy:
+    image: haproxy:2.7.2
+    container_name: haproxy
+    ports:
+      - "443:443"
+    volumes:
+      - ./haproxy.conf:/usr/local/etc/haproxy/haproxy.cfg
+      - ./haproxy.pem:/etc/ssl/certs/mysite.pem
+```
+
+Start the complete stack:
+
+```bash
+cd docker
+docker-compose up -d
+```
+
+Stop the stack:
+
+```bash
+cd docker
+docker-compose down
+```
+
+## What's Next?
+
+Now that you have the verifier running, explore these topics:
 
 <CardGroup cols={2}>
+  <Card title="Presentation Flows" icon="diagram-project" href="/concepts/presentation-flows">
+    Learn about same-device and cross-device verification flows
+  </Card>
 
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
+  <Card title="Configuration" icon="gear" href="/configuration/overview">
+    Explore all configuration options and environment variables
+  </Card>
 
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
+  <Card title="API Reference" icon="code" href="/api/verifier/initialize-transaction">
+    Detailed API documentation for all endpoints
+  </Card>
 
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Trust Sources" icon="shield-check" href="/configuration/trust-sources">
+    Configure trusted credential issuers
+  </Card>
 </CardGroup>
 
+## Need Help?
+
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  This is an **initial development release** and should not be used in production. For the latest version and updates, visit the [GitHub repository](https://github.com/eu-digital-identity-wallet/av-srv-web-verifier-endpoint-23220-4-kt).
 </Note>

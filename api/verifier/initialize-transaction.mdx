@@ -1,0 +1,268 @@
+---
+title: "Initialize Transaction"
+description: "Create a new OpenID4VP authorization request to request credentials from a wallet"
+---
+
+## Endpoint
+
+```
+POST /ui/presentations
+```
+
+This endpoint initiates a new presentation transaction by creating an OpenID4VP authorization request. The verifier application uses this endpoint to specify what credentials to request from the wallet.
+
+The endpoint can return either a JSON response with the authorization request details or a PNG QR code depending on the `Accept` header.
+
+## Request Headers
+
+<ParamField header="Content-Type" type="string" required>
+  Must be `application/json`
+</ParamField>
+
+<ParamField header="Accept" type="string" required>
+  - `application/json` - Returns JSON with transaction details
+  - `image/png` - Returns a QR code image containing the authorization request URI
+</ParamField>
+
+## Request Body
+
+<ParamField body="dcql_query" type="object" required>
+  A JSON object depicting the query, expressed using DCQL (Digital Credentials Query Language), to be included in the OpenID4VP authorization request. Specifies which credentials and claims to request from the wallet.
+  
+  <Expandable title="Example DCQL query">
+    ```json
+    {
+      "credentials": [
+        {
+          "id": "32f54163-7166-48f1-93d8-ff217bdb0653",
+          "format": "mso_mdoc",
+          "meta": {
+            "doctype_value": "eu.europa.ec.eudi.pid.1"
+          },
+          "claims": [
+            {
+              "path": ["eu.europa.ec.eudi.pid.1", "family_name"]
+            }
+          ]
+        }
+      ],
+      "credential_sets": [
+        {
+          "options": [
+            ["32f54163-7166-48f1-93d8-ff217bdb0653"]
+          ],
+          "purpose": "We need to verify your identity"
+        }
+      ]
+    }
+    ```
+  </Expandable>
+</ParamField>
+
+<ParamField body="nonce" type="string" required>
+  Nonce value to be included in the OpenID4VP authorization request. Used to prevent replay attacks.
+</ParamField>
+
+<ParamField body="response_mode" type="string">
+  Controls the `response_mode` attribute of the OpenID4VP authorization request.
+  
+  **Allowed values:**
+  - `direct_post` - Wallet posts response as form parameters
+  - `direct_post.jwt` - Wallet posts response as encrypted JWT
+</ParamField>
+
+<ParamField body="jar_mode" type="string">
+  Controls how the generated authorization request will be passed to the wallet.
+  
+  **Allowed values:**
+  - `by_value` - Request passed inline to the wallet
+  - `by_reference` - A `request_uri` URL will be returned
+</ParamField>
+
+<ParamField body="request_uri_method" type="string">
+  Method for retrieving the authorization request when `jar_mode` is `by_reference`.
+  
+  **Allowed values:**
+  - `get` - Wallet retrieves request using HTTP GET
+  - `post` - Wallet retrieves request using HTTP POST
+  
+  If omitted, defaults to the value configured in `VERIFIER_REQUESTJWT_REQUESTURIMETHOD`.
+</ParamField>
+
+<ParamField body="wallet_response_redirect_uri_template" type="string">
+  Optional URI template used to construct the response to the wallet when it posts its authorization response. Used in same-device flows to redirect the wallet back to the verifier application.
+</ParamField>
+
+<ParamField body="issuer_chain" type="string">
+  A PEM-encoded X.509 certificate chain (including start and end markers) of a Verifiable Credential Issuer to be trusted during this transaction. Allows per-transaction trust configuration.
+  
+  <Expandable title="Example certificate chain">
+    ```
+    -----BEGIN CERTIFICATE-----
+    MIIDHTCCAqOgAwIBAgIUVqjgtJqf4hUYJkqdYzi+0xwhwFYwCgYIKoZIzj0EAwMw
+    XDEeMBwGA1UEAwwVUElEIElzc3VlciBDQSAtIFVUIDAxMS0wKwYDVQQKDCRFVURJ
+    ...
+    -----END CERTIFICATE-----
+    ```
+  </Expandable>
+</ParamField>
+
+<ParamField body="authorization_request_scheme" type="string">
+  Optional scheme to use as the scheme part of the URI contained inside the QR code. If not provided, uses the default scheme configured in the verifier.
+</ParamField>
+
+<ParamField body="transaction_data" type="array">
+  Optional array of JSON objects containing additional transaction data to be included in the authorization request.
+</ParamField>
+
+## Response
+
+<ResponseField name="Transaction-Id" type="string" header>
+  The unique identifier for this transaction. This header is included in both JSON and QR code responses.
+</ResponseField>
+
+### JSON Response (Accept: application/json)
+
+<ResponseField name="transaction_id" type="string" required>
+  Unique identifier for this presentation transaction.
+</ResponseField>
+
+<ResponseField name="client_id" type="string" required>
+  The client identifier of the verifier (e.g., `x509_san_dns:localhost`).
+</ResponseField>
+
+<ResponseField name="request" type="string">
+  The full authorization request as a signed JWT. Only present when `jar_mode` is `by_value`.
+</ResponseField>
+
+<ResponseField name="request_uri" type="string">
+  URL where the wallet can retrieve the authorization request. Only present when `jar_mode` is `by_reference`.
+</ResponseField>
+
+<ResponseField name="request_uri_method" type="string">
+  HTTP method to use when retrieving the authorization request (`get` or `post`). Only present when `jar_mode` is `by_reference`.
+</ResponseField>
+
+### QR Code Response (Accept: image/png)
+
+Returns a PNG image containing a QR code that encodes the authorization request URI. The wallet can scan this QR code to initiate the credential presentation flow.
+
+## Examples
+
+### Request JSON Response
+
+```bash
+curl -X POST -H "Content-type: application/json" -d '{  
+  "dcql_query": {
+    "credentials": [
+      {
+        "id": "32f54163-7166-48f1-93d8-ff217bdb0653",
+        "format": "mso_mdoc",
+        "meta": {
+          "doctype_value": "eu.europa.ec.eudi.pid.1"
+        },
+        "claims": [
+          {
+            "path": ["eu.europa.ec.eudi.pid.1", "family_name"]
+          }
+        ]
+      }
+    ],
+    "credential_sets": [
+      {
+        "options": [
+          [
+            "32f54163-7166-48f1-93d8-ff217bdb0653"
+          ]
+        ],
+        "purpose": "We need to verify your identity"
+      }
+    ]
+  },
+  "nonce": "nonce",
+  "jar_mode": "by_reference",
+  "request_uri_method": "post",
+  "issuer_chain": "-----BEGIN CERTIFICATE-----\nMIIDHTCCAqOgAwIBAgIUVqjgtJqf4hUYJkqdYzi+0xwhwFYwCgYIKoZIzj0EAwMw\nXDEeMBwGA1UEAwwVUElEIElzc3VlciBDQSAtIFVUIDAxMS0wKwYDVQQKDCRFVURJ\nIFdhbGxldCBSZWZlcmVuY2UgSW1wbGVtZW50YXRpb24xCzAJBgNVBAYTAlVUMB4X\nDTIzMDkwMTE4MzQxN1oXDTMyMTEyNzE4MzQxNlowXDEeMBwGA1UEAwwVUElEIElz\nc3VlciBDQSAtIFVUIDAxMS0wKwYDVQQKDCRFVURJIFdhbGxldCBSZWZlcmVuY2Ug\nSW1wbGVtZW50YXRpb24xCzAJBgNVBAYTAlVUMHYwEAYHKoZIzj0CAQYFK4EEACID\nYgAEFg5Shfsxp5R/UFIEKS3L27dwnFhnjSgUh2btKOQEnfb3doyeqMAvBtUMlClh\nsF3uefKinCw08NB31rwC+dtj6X/LE3n2C9jROIUN8PrnlLS5Qs4Rs4ZU5OIgztoa\nO8G9o4IBJDCCASAwEgYDVR0TAQH/BAgwBgEB/wIBADAfBgNVHSMEGDAWgBSzbLiR\nFxzXpBpmMYdC4YvAQMyVGzAWBgNVHSUBAf8EDDAKBggrgQICAAABBzBDBgNVHR8E\nPDA6MDigNqA0hjJodHRwczovL3ByZXByb2QucGtpLmV1ZGl3LmRldi9jcmwvcGlk\nX0NBX1VUXzAxLmNybDAdBgNVHQ4EFgQUs2y4kRcc16QaZjGHQuGLwEDMlRswDgYD\nVR0PAQH/BAQDAgEGMF0GA1UdEgRWMFSGUmh0dHBzOi8vZ2l0aHViLmNvbS9ldS1k\naWdpdGFsLWlkZW50aXR5LXdhbGxldC9hcmNoaXRlY3R1cmUtYW5kLXJlZmVyZW5j\nZS1mcmFtZXdvcmswCgYIKoZIzj0EAwMDaAAwZQIwaXUA3j++xl/tdD76tXEWCikf\nM1CaRz4vzBC7NS0wCdItKiz6HZeV8EPtNCnsfKpNAjEAqrdeKDnr5Kwf8BA7tATe\nhxNlOV4Hnc10XO1XULtigCwb49RpkqlS2Hul+DpqObUs\n-----END CERTIFICATE-----"
+}' 'http://localhost:8080/ui/presentations'
+```
+
+<ResponseExample>
+```json
+{
+  "transaction_id": "STMMbidoCQTtyk9id5IcoL8CqdC8rxgks5FF8cqqUrHvw0IL3AaIHGnwxvrvcEyUJ6uUPNdoBQDa7yCqpjtKaw",
+  "client_id": "x509_san_dns:localhost",
+  "request_uri": "https://localhost:8080/wallet/request.jwt/5N6E7VZsmwXOGLz1Xlfi96MoyZVC3FZxwdAuJ26DnGcan-vYs-VAKErioQ58BWEsKlVw2_X49jpZHyp0Mk9nKw",
+  "request_uri_method": "post"
+}
+```
+</ResponseExample>
+
+### Request QR Code Response
+
+```bash
+curl -X POST -H "Content-type: application/json" -H "Accept: image/png" -d '{
+  "dcql_query": {
+    "credentials": [
+      {
+        "id": "32f54163-7166-48f1-93d8-ff217bdb0653",
+        "format": "mso_mdoc",
+        "meta": {
+          "doctype_value": "eu.europa.ec.eudi.pid.1"
+        },
+        "claims": [
+          {
+            "path": ["eu.europa.ec.eudi.pid.1", "family_name"]
+          }
+        ]
+      }
+    ],
+    "credential_sets": [
+      {
+        "options": [
+          [
+            "32f54163-7166-48f1-93d8-ff217bdb0653"
+          ]
+        ],
+        "purpose": "We need to verify your identity"
+      }
+    ]
+  },
+  "nonce": "nonce",
+  "jar_mode": "by_reference",
+  "request_uri_method": "post"
+}' 'http://localhost:8080/ui/presentations' > qr-code.png
+```
+
+This will save a QR code image to `qr-code.png` that can be displayed to the user. The `Transaction-Id` header will still be included in the response.
+
+## Error Responses
+
+<ResponseField name="error" type="string">
+  Error code indicating what validation failed.
+  
+  **Possible values:**
+  - `MissingPresentationQuery` - No `dcql_query` provided
+  - `MissingNonce` - No `nonce` provided
+  - `InvalidWalletResponseTemplate` - Invalid `wallet_response_redirect_uri_template`
+  - `InvalidTransactionData` - Invalid `transaction_data` format
+  - `UnsupportedFormat` - Unsupported credential format in query
+  - `InvalidIssuerChain` - Invalid certificate chain in `issuer_chain`
+  - `InvalidAuthorizationRequestScheme` - Invalid `authorization_request_scheme`
+</ResponseField>
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Get Wallet Response" icon="arrow-down-to-bracket" href="/api/verifier/get-wallet-response">
+    Retrieve the wallet's response to this authorization request
+  </Card>
+  <Card title="Get Presentation Events" icon="list" href="/api/verifier/get-presentation-events">
+    View the event log for this transaction
+  </Card>
+</CardGroup>
+
+## See Also
+
+- [Presentation Flows](/concepts/presentation-flows) - Understand same-device and cross-device flows
+- [Transactions](/concepts/transactions) - Learn about transaction lifecycle
+- Source: [VerifierApi.kt:40-80](https://github.com/eu-digital-identity-wallet/av-srv-web-verifier-endpoint-23220-4-kt/blob/main/src/main/kotlin/eu/europa/ec/eudi/verifier/endpoint/adapter/input/web/VerifierApi.kt#L40-L80)

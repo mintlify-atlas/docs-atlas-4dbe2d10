@@ -1,0 +1,97 @@
+---
+title: 'GET Request Object'
+description: 'Retrieve the authorization request object using GET method'
+---
+
+## Overview
+
+This endpoint allows the wallet to retrieve the OpenID4VP authorization request object when using the `request_uri_method: get` approach. The request object is returned as a signed JWT according to the JWT Secured Authorization Request specification.
+
+## Endpoint
+
+```
+GET /wallet/request.jwt/{requestId}
+```
+
+## Path Parameters
+
+<ParamField path="requestId" type="string" required>
+  The unique identifier of the authorization request. This value is provided in the `request_uri` from the Initialize Transaction endpoint response.
+</ParamField>
+
+## Response
+
+The response is a signed JWT (JSON Web Token) containing the authorization request payload.
+
+**Content-Type:** `application/oauth-authz-req+jwt`
+
+### Response Fields
+
+The JWT payload contains the OpenID4VP authorization request with fields such as:
+
+<ResponseField name="client_id" type="string">
+  The client identifier of the verifier
+</ResponseField>
+
+<ResponseField name="response_type" type="string">
+  Always `vp_token` for OpenID4VP flows
+</ResponseField>
+
+<ResponseField name="response_mode" type="string">
+  Either `direct_post` or `direct_post.jwt`
+</ResponseField>
+
+<ResponseField name="state" type="string">
+  A unique state value that must be included in the wallet's response
+</ResponseField>
+
+<ResponseField name="nonce" type="string">
+  A unique nonce value to prevent replay attacks
+</ResponseField>
+
+<ResponseField name="presentation_definition" type="object">
+  The DCQL query defining which credentials are requested
+</ResponseField>
+
+<ResponseField name="response_uri" type="string">
+  The URL where the wallet should POST its response
+</ResponseField>
+
+## Example Request
+
+```bash
+curl https://localhost:8080/wallet/request.jwt/5N6E7VZsmwXOGLz1Xlfi96MoyZVC3FZxwdAuJ26DnGcan-vYs-VAKErioQ58BWEsKlVw2_X49jpZHyp0Mk9nKw
+```
+
+## Example Response
+
+```
+eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJjbGllbnRfaWQiOiJ4NTA5X3Nhbl9kbnM6bG9jYWxob3N0IiwicmVzcG9uc2VfdHlwZSI6InZwX3Rva2VuIiwicmVzcG9uc2VfbW9kZSI6ImRpcmVjdF9wb3N0Iiwic3RhdGUiOiJJc29ZOVZ3WlhwOEdTN3pnNENFSHNDTnUtNUxwQWlQR2pid1lzc1oybmgzdG5raHl0TncybU5aTFNGc0tPd2RHMld3MzNoWDZQVXA2UDl4SW1kUy1xQSIsIm5vbmNlIjoibm9uY2UiLCJwcmVzZW50YXRpb25fZGVmaW5pdGlvbiI6ey4uLn0sInJlc3BvbnNlX3VyaSI6Imh0dHBzOi8vbG9jYWxob3N0OjgwODAvd2FsbGV0L2RpcmVjdF9wb3N0L0lzb1k5VndaWHA4R1M3emc0Q0VIc0NOdS01THBBaVBHamJ3WXNzWjJuaDN0bmtoeXROdzJtTlpMU0ZzS093ZEcyV3czM2hYNlBVcDZQOXhJbWRTLXFBIn0.signature
+```
+
+## Error Responses
+
+<ResponseField name="404 Not Found" type="error">
+  The request object with the specified `requestId` was not found or has expired
+</ResponseField>
+
+<ResponseField name="400 Bad Request" type="error">
+  The request is malformed or invalid
+</ResponseField>
+
+## Usage Flow
+
+1. Verifier initializes a transaction and receives a `request_uri`
+2. Verifier presents the `request_uri` to the wallet (via QR code or deep link)
+3. Wallet extracts the `requestId` from the `request_uri`
+4. Wallet calls this GET endpoint to retrieve the authorization request JWT
+5. Wallet validates and processes the JWT to determine which credentials to present
+
+## Related Endpoints
+
+- [POST Request Object](/api/wallet/post-request-object) - Alternative method using POST
+- [Direct Post](/api/wallet/direct-post) - Submit wallet response
+
+## Source Code Reference
+
+Implementation: `WalletApi.kt:69` (`handleRetrieveRequestObject`)

@@ -1,0 +1,282 @@
+---
+title: 'Trust Sources Configuration'
+description: 'Configure trust sources for validating credential issuers'
+---
+
+The EUDI Verifier Endpoint supports configuring multiple trust sources that will be used to trust the issuers of presented credentials. Each trust source is associated with a regex pattern that matches credentials based on their docType or vct.
+
+## Trust Source Overview
+
+Each trust source can be configured with:
+- **List of Trusted Lists (LOTL)** - A list pointing to multiple trust lists
+- **Trust List (TL)** - A single trust list with issuer certificates
+- **Keystore** - Direct certificate loading from a keystore
+- Any combination of the above
+
+Trust sources are indexed starting from `0` and can be incremented for multiple sources (e.g., `VERIFIER_TRUSTSOURCES_0_*`, `VERIFIER_TRUSTSOURCES_1_*`, etc.).
+
+## Pattern Matching
+
+<ParamField path="VERIFIER_TRUSTSOURCES_0_PATTERN" type="string" required>
+  The regex pattern used to match the trust source to an issuer, based on a credential's docType/vct.
+  
+  Example: `eu.europa.ec.eudi.pid.*|urn:eu.europa.ec.eudi:pid:.*`
+</ParamField>
+
+<Tip>
+  Use the pipe character `|` to match multiple patterns. The pattern supports standard regex syntax.
+</Tip>
+
+## List of Trusted Lists (LOTL) Configuration
+
+A LOTL is a list that points to multiple trust lists. This is useful for federated trust management.
+
+<ParamField path="VERIFIER_TRUSTSOURCES_0_LOTL_LOCATION" type="string">
+  If present, the URL of the List of Trusted Lists from which to load the X509 Certificates for this trust source.
+  
+  Example: `https://example.com/lotl.xml`
+</ParamField>
+
+<ParamField path="VERIFIER_TRUSTSOURCES_0_LOTL_REFRESHINTERVAL" type="string" default="0 0 * * * *">
+  If present, a cron expression with the refresh interval of the List of Trusted Lists.
+  
+  Default: `0 0 * * * *` (every hour)
+  
+  Example: `0 0 */4 * * *` (every 4 hours)
+</ParamField>
+
+<ParamField path="VERIFIER_TRUSTSOURCES_0_LOTL_SERVICETYPEFILTER" type="string">
+  If present, the service type filter to be used when loading the List of Trusted Lists. If not present, all service types are loaded.
+  
+  Valid values: `PIDProvider`, `QEEAProvider`, `PubEAAProvider`
+  
+  Example: `PIDProvider`
+</ParamField>
+
+### LOTL Keystore Configuration
+
+Certificates for verifying the LOTL signature:
+
+<ParamField path="VERIFIER_TRUSTSOURCES_0_LOTL_KEYSTORE_PATH" type="string">
+  If present, the URL of the Keystore which contains the public key that was used to sign the List of Trusted Lists.
+  
+  Examples:
+  - `classpath:lotl-key.jks`
+  - `file:///lotl-key.jks`
+</ParamField>
+
+<ParamField path="VERIFIER_TRUSTSOURCES_0_LOTL_KEYSTORE_TYPE" type="string">
+  Type of the Keystore which contains the public key that was used to sign the List of Trusted Lists.
+  
+  Examples: `jks`, `pkcs12`
+</ParamField>
+
+<ParamField path="VERIFIER_TRUSTSOURCES_0_LOTL_KEYSTORE_PASSWORD" type="string">
+  If present and non-blank, the password of the Keystore which contains the public key that was used to sign the List of Trusted Lists.
+</ParamField>
+
+## Trust List (TL) Configuration
+
+A trust list contains X509 certificates of trusted issuers.
+
+<ParamField path="VERIFIER_TRUSTSOURCES_0_TL_LOCATION" type="string">
+  If present, the URL of the Trust List from which to load the X509 Certificates for this trust source.
+  
+  Example: `https://example.com/trust-list.xml`
+</ParamField>
+
+<ParamField path="VERIFIER_TRUSTSOURCES_0_TL_REFRESHINTERVAL" type="string" default="0 0 * * * *">
+  If present, a cron expression with the refresh interval of the Trust List.
+  
+  Default: `0 0 * * * *` (every hour)
+  
+  Example: `0 0 */4 * * *` (every 4 hours)
+</ParamField>
+
+<ParamField path="VERIFIER_TRUSTSOURCES_0_TL_SERVICETYPEFILTER" type="string">
+  If present, the service type filter to be used when loading the Trust List. If not present, all service types are loaded.
+  
+  Valid values: `PIDProvider`, `QEEAProvider`, `PubEAAProvider`, `PAAProvider`
+  
+  Example: `PAAProvider`
+</ParamField>
+
+### TL Keystore Configuration
+
+Certificates for verifying the TL signature:
+
+<ParamField path="VERIFIER_TRUSTSOURCES_0_TL_KEYSTORE_PATH" type="string">
+  If present, the URL of the Keystore which contains the public key that was used to sign the Trust List.
+  
+  Examples:
+  - `classpath:tl-key.jks`
+  - `file:///tl-key.jks`
+</ParamField>
+
+<ParamField path="VERIFIER_TRUSTSOURCES_0_TL_KEYSTORE_TYPE" type="string">
+  Type of the Keystore which contains the public key that was used to sign the Trust List.
+  
+  Examples: `jks`, `pkcs12`
+</ParamField>
+
+<ParamField path="VERIFIER_TRUSTSOURCES_0_TL_KEYSTORE_PASSWORD" type="string">
+  If present and non-blank, the password of the Keystore which contains the public key that was used to sign the Trust List.
+</ParamField>
+
+## Configuration Examples
+
+### Single Trust Source with LOTL
+
+```bash
+# Match PID credentials
+VERIFIER_TRUSTSOURCES_0_PATTERN=eu.europa.ec.eudi.pid.*
+
+# LOTL configuration
+VERIFIER_TRUSTSOURCES_0_LOTL_LOCATION=https://preprod.pki.eudiw.dev/lotl.xml
+VERIFIER_TRUSTSOURCES_0_LOTL_REFRESHINTERVAL=0 0 */4 * * *
+VERIFIER_TRUSTSOURCES_0_LOTL_SERVICETYPEFILTER=PIDProvider
+
+# LOTL signing key
+VERIFIER_TRUSTSOURCES_0_LOTL_KEYSTORE_PATH=classpath:lotl-key.jks
+VERIFIER_TRUSTSOURCES_0_LOTL_KEYSTORE_TYPE=jks
+VERIFIER_TRUSTSOURCES_0_LOTL_KEYSTORE_PASSWORD=changeit
+```
+
+### Single Trust Source with TL
+
+```bash
+# Match all PID credentials
+VERIFIER_TRUSTSOURCES_0_PATTERN=eu.europa.ec.eudi.pid.*
+
+# Trust List configuration
+VERIFIER_TRUSTSOURCES_0_TL_LOCATION=https://preprod.pki.eudiw.dev/tl.xml
+VERIFIER_TRUSTSOURCES_0_TL_REFRESHINTERVAL=0 0 * * * *
+VERIFIER_TRUSTSOURCES_0_TL_SERVICETYPEFILTER=PIDProvider
+
+# TL signing key
+VERIFIER_TRUSTSOURCES_0_TL_KEYSTORE_PATH=file:///certs/tl-key.p12
+VERIFIER_TRUSTSOURCES_0_TL_KEYSTORE_TYPE=pkcs12
+VERIFIER_TRUSTSOURCES_0_TL_KEYSTORE_PASSWORD=secret
+```
+
+### Multiple Trust Sources
+
+```bash
+# Trust source for PID
+VERIFIER_TRUSTSOURCES_0_PATTERN=eu.europa.ec.eudi.pid.*|urn:eu.europa.ec.eudi:pid:.*
+VERIFIER_TRUSTSOURCES_0_TL_LOCATION=https://preprod.pki.eudiw.dev/pid-tl.xml
+VERIFIER_TRUSTSOURCES_0_TL_SERVICETYPEFILTER=PIDProvider
+
+# Trust source for mDL
+VERIFIER_TRUSTSOURCES_1_PATTERN=org.iso.18013.5.1.mDL
+VERIFIER_TRUSTSOURCES_1_TL_LOCATION=https://preprod.pki.eudiw.dev/mdl-tl.xml
+VERIFIER_TRUSTSOURCES_1_TL_SERVICETYPEFILTER=PAAProvider
+
+# Trust source for qualified attestations
+VERIFIER_TRUSTSOURCES_2_PATTERN=eu.europa.ec.eudi.qeaa.*
+VERIFIER_TRUSTSOURCES_2_LOTL_LOCATION=https://preprod.pki.eudiw.dev/qeaa-lotl.xml
+VERIFIER_TRUSTSOURCES_2_LOTL_SERVICETYPEFILTER=QEEAProvider
+```
+
+### Combined LOTL and TL
+
+You can configure both LOTL and TL for a single trust source:
+
+```bash
+VERIFIER_TRUSTSOURCES_0_PATTERN=eu.europa.ec.eudi.*
+
+# LOTL configuration
+VERIFIER_TRUSTSOURCES_0_LOTL_LOCATION=https://preprod.pki.eudiw.dev/lotl.xml
+VERIFIER_TRUSTSOURCES_0_LOTL_KEYSTORE_PATH=classpath:lotl-key.jks
+VERIFIER_TRUSTSOURCES_0_LOTL_KEYSTORE_TYPE=jks
+
+# Additional TL configuration
+VERIFIER_TRUSTSOURCES_0_TL_LOCATION=https://preprod.pki.eudiw.dev/additional-tl.xml
+VERIFIER_TRUSTSOURCES_0_TL_KEYSTORE_PATH=classpath:tl-key.jks
+VERIFIER_TRUSTSOURCES_0_TL_KEYSTORE_TYPE=jks
+```
+
+## Docker Compose Example
+
+```yaml
+verifier:
+  image: ghcr.io/eu-digital-identity-wallet/eudi-srv-web-verifier-endpoint-23220-4-kt:latest
+  container_name: verifier-backend
+  ports:
+    - "8080:8080"
+  environment:
+    # PID Trust Source
+    VERIFIER_TRUSTSOURCES_0_PATTERN: "eu.europa.ec.eudi.pid.*"
+    VERIFIER_TRUSTSOURCES_0_TL_LOCATION: "https://preprod.pki.eudiw.dev/tl.xml"
+    VERIFIER_TRUSTSOURCES_0_TL_SERVICETYPEFILTER: "PIDProvider"
+    VERIFIER_TRUSTSOURCES_0_TL_KEYSTORE_PATH: "file:///certs/tl-key.jks"
+    VERIFIER_TRUSTSOURCES_0_TL_KEYSTORE_TYPE: "jks"
+    VERIFIER_TRUSTSOURCES_0_TL_KEYSTORE_PASSWORD: "changeit"
+    
+    # mDL Trust Source
+    VERIFIER_TRUSTSOURCES_1_PATTERN: "org.iso.18013.5.1.mDL"
+    VERIFIER_TRUSTSOURCES_1_TL_LOCATION: "https://preprod.pki.eudiw.dev/mdl-tl.xml"
+    VERIFIER_TRUSTSOURCES_1_TL_SERVICETYPEFILTER: "PAAProvider"
+  volumes:
+    - ./certs/tl-key.jks:/certs/tl-key.jks:ro
+```
+
+## Service Type Filters
+
+Service type filters limit which certificates are loaded from a trust list:
+
+| Service Type | Description |
+|--------------|-------------|
+| `PIDProvider` | Person Identification Data providers |
+| `QEEAProvider` | Qualified Electronic Attestation of Attributes providers |
+| `PubEAAProvider` | Public Electronic Attestation of Attributes providers |
+| `PAAProvider` | Pseudonym Attestation providers (mDL) |
+
+## Cron Expression Format
+
+Refresh intervals use cron expressions with 6 fields:
+
+```
+┌───────────── second (0-59)
+│ ┌───────────── minute (0-59)
+│ │ ┌───────────── hour (0-23)
+│ │ │ ┌───────────── day of month (1-31)
+│ │ │ │ ┌───────────── month (1-12)
+│ │ │ │ │ ┌───────────── day of week (0-6)
+│ │ │ │ │ │
+* * * * * *
+```
+
+### Common Examples
+
+| Expression | Description |
+|------------|-------------|
+| `0 0 * * * *` | Every hour |
+| `0 0 */4 * * *` | Every 4 hours |
+| `0 0 0 * * *` | Once a day at midnight |
+| `0 0 0 * * 0` | Once a week on Sunday |
+| `0 30 2 * * *` | Every day at 2:30 AM |
+
+## Security Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use HTTPS for Trust Lists">
+    Always load trust lists over HTTPS to prevent man-in-the-middle attacks.
+  </Accordion>
+  
+  <Accordion title="Verify Trust List Signatures">
+    Configure keystore paths and passwords to enable signature verification of trust lists.
+  </Accordion>
+  
+  <Accordion title="Regular Refresh">
+    Set appropriate refresh intervals to ensure certificates are updated regularly. Balance between freshness and server load.
+  </Accordion>
+  
+  <Accordion title="Use Service Type Filters">
+    Apply service type filters to load only the certificates needed for your use case, reducing memory usage and attack surface.
+  </Accordion>
+  
+  <Accordion title="Pattern Specificity">
+    Use specific patterns to avoid unintended trust relationships. Avoid overly broad patterns like `.*`.
+  </Accordion>
+</AccordionGroup>
