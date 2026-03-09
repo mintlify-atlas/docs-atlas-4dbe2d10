@@ -1,0 +1,101 @@
+{
+  "projectType": "api-service",
+  "projectName": "EUDI Verifier Endpoint",
+  "projectDescription": "OpenID4VP verifier endpoint implementing credential verification flows for EU Digital Identity Wallet",
+  "theme": "aspen",
+  "primaryColor": "#94cb04",
+  "lightColor": "#545454",
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/presentation-flows",
+              "concepts/transactions",
+              "concepts/trust-sources"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/docker",
+              "deployment/docker-compose",
+              "deployment/azure"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/overview",
+              "configuration/jar-signing",
+              "configuration/trust-sources",
+              "configuration/response-encryption",
+              "configuration/credential-formats",
+              "configuration/cors",
+              "configuration/proxy"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Verifier API",
+            "pages": [
+              "api/verifier/initialize-transaction",
+              "api/verifier/get-wallet-response",
+              "api/verifier/get-presentation-events"
+            ]
+          },
+          {
+            "group": "Wallet API",
+            "pages": [
+              "api/wallet/get-request-object",
+              "api/wallet/post-request-object",
+              "api/wallet/direct-post"
+            ]
+          },
+          {
+            "group": "Utility API",
+            "pages": [
+              "api/utility/validate-mso-mdoc"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "OpenID4VP 1.0 protocol implementation",
+    "Same-device and cross-device presentation flows",
+    "MSO MDoc and SD-JWT VC credential format support",
+    "DCQL query support for credential requests",
+    "Trust source configuration (LOTL, Trust Lists, Keystores)",
+    "JAR (JWT-secured Authorization Request) signing",
+    "Response encryption with multiple algorithms",
+    "QR code generation for cross-device flows",
+    "Transaction-based presentation lifecycle"
+  ],
+  "publicApiSurface": [
+    "POST /ui/presentations - Initialize transaction",
+    "GET /ui/presentations/{transactionId} - Get wallet response",
+    "GET /ui/presentations/{transactionId}/events - Get presentation events",
+    "GET /wallet/request.jwt/{requestId} - Get request object (GET)",
+    "POST /wallet/request.jwt/{requestId} - Get request object (POST)",
+    "POST /wallet/direct_post/{requestId} - Direct post wallet response",
+    "GET /wallet/public-keys.json - Get public JWK set",
+    "POST /utilities/validations/msoMdoc/deviceResponse - Validate MSO MDoc"
+  ]
+}
