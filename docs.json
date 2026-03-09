@@ -81,13 +81,15 @@
             "pages": [
               "api/wallet/get-request-object",
               "api/wallet/post-request-object",
-              "api/wallet/direct-post"
+              "api/wallet/direct-post",
+              "api/wallet/get-public-keys"
             ]
           },
           {
             "group": "Utility API",
             "pages": [
-              "api/utility/validate-mso-mdoc"
+              "api/utility/validate-mso-mdoc",
+              "api/utility/validate-sd-jwt-vc"
             ]
           }
         ]

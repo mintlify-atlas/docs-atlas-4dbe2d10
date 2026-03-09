@@ -1,0 +1,231 @@
+---
+title: "Validate SD-JWT VC"
+api: "POST /utilities/validations/sdJwtVc"
+description: "Validate an SD-JWT Verifiable Credential including signature verification, key binding, and issuer trust validation"
+---
+
+## Overview
+
+This utility endpoint validates an SD-JWT Verifiable Credential (SD-JWT VC) by performing comprehensive security checks. It verifies the signature, validates the key binding JWT, checks issuer trust, and ensures the credential meets all requirements.
+
+<Info>
+This endpoint is useful for testing and debugging credential validation logic without initiating a full presentation flow.
+</Info>
+
+## Validations Performed
+
+<Steps>
+  <Step title="Format Validation">
+    Verifies the credential is a valid SD-JWT VC format with proper structure
+  </Step>
+  
+  <Step title="Signature Verification">
+    Validates the Issuer Signed JWT signature using the issuer's public key
+  </Step>
+  
+  <Step title="Key Binding Verification">
+    Verifies the Key Binding JWT (KB-JWT) signature using the holder's key
+  </Step>
+  
+  <Step title="Nonce Validation">
+    Ensures the nonce in the KB-JWT matches the expected nonce value
+  </Step>
+  
+  <Step title="Issuer Trust Validation">
+    Verifies the issuer is trusted (against configured trust sources or provided certificate chain)
+  </Step>
+  
+  <Step title="Status Check">
+    If enabled, validates the credential status (not revoked or suspended)
+  </Step>
+  
+  <Step title="Type Metadata Validation">
+    If configured, validates the credential against its type metadata and JSON schema
+  </Step>
+</Steps>
+
+## Request
+
+<ParamField path="sd_jwt_vc" type="string" required>
+  The SD-JWT VC to validate as a string (Issuer-signed JWT + Disclosures + Key Binding JWT)
+  
+  Format: `<issuer-signed-jwt>~<disclosure-1>~<disclosure-2>~...~<key-binding-jwt>`
+</ParamField>
+
+<ParamField path="nonce" type="string" required>
+  The nonce value that must match the nonce in the Key Binding JWT
+  
+  This proves the KB-JWT was created specifically for this verification request.
+</ParamField>
+
+<ParamField path="issuer_chain" type="string">
+  Optional PEM-encoded X509 certificate chain of the issuer (including start and end markers)
+  
+  If provided, this chain will be used to validate the issuer's trust instead of the configured trust sources.
+</ParamField>
+
+## Response
+
+<Tabs>
+  <Tab title="Success">
+    <ResponseField name="(claims)" type="object">
+      The validated and reconstructed claims from the SD-JWT VC, including all disclosed attributes
+      
+      <Expandable title="Example structure">
+        <ResponseField name="vct" type="string">
+          The verifiable credential type identifier
+        </ResponseField>
+        
+        <ResponseField name="iss" type="string">
+          The issuer identifier (URL)
+        </ResponseField>
+        
+        <ResponseField name="iat" type="number">
+          Issuance timestamp
+        </ResponseField>
+        
+        <ResponseField name="exp" type="number">
+          Expiration timestamp
+        </ResponseField>
+        
+        <ResponseField name="[disclosed_claims]" type="various">
+          All disclosed claims from the credential
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Tab>
+  
+  <Tab title="Error">
+    <ResponseField name="type" type="string">
+      The error type indicating what validation failed
+      
+      Possible values:
+      - `InvalidSignature` - Issuer JWT signature verification failed
+      - `InvalidKeyBinding` - Key Binding JWT validation failed
+      - `InvalidNonce` - Nonce mismatch
+      - `UntrustedIssuer` - Issuer not trusted
+      - `ExpiredCredential` - Credential has expired
+      - `RevokedCredential` - Credential status indicates revocation
+      - `InvalidFormat` - Malformed SD-JWT VC
+      - `TypeMetadataValidationFailed` - Schema validation failed
+    </ResponseField>
+    
+    <ResponseField name="message" type="string">
+      Detailed error message explaining what went wrong
+    </ResponseField>
+    
+    <ResponseField name="details" type="object">
+      Additional details about the validation failure (optional)
+    </ResponseField>
+  </Tab>
+</Tabs>
+
+## Example
+
+<RequestExample>
+```bash cURL
+curl -X POST 'http://localhost:8080/utilities/validations/sdJwtVc' \
+  -H "Content-type: application/x-www-form-urlencoded" \
+  -H "Accept: application/json" \
+  --data-urlencode "sd_jwt_vc=eyJhbGc...~WyJzYWx0MSIsICJnaXZlbl9uYW1lIiwgIkpvaG4iXQ~...~eyJhbGc..." \
+  --data-urlencode "nonce=random-nonce-value-12345"
+```
+</RequestExample>
+
+<ResponseExample>
+```json Success Response
+{
+  "vct": "urn:eu.europa.ec.eudi:pid:1",
+  "iss": "https://issuer.example.com",
+  "iat": 1710000000,
+  "exp": 1741536000,
+  "given_name": "John",
+  "family_name": "Doe",
+  "birth_date": "1990-01-15",
+  "age_over_18": true,
+  "cnf": {
+    "jwk": {
+      "kty": "EC",
+      "crv": "P-256",
+      "x": "...",
+      "y": "..."
+    }
+  }
+}
+```
+
+```json Error Response
+{
+  "type": "InvalidKeyBinding",
+  "message": "Key Binding JWT verification failed: nonce mismatch",
+  "details": {
+    "expected_nonce": "random-nonce-value-12345",
+    "actual_nonce": "different-nonce"
+  }
+}
+```
+</ResponseExample>
+
+## Common Errors
+
+<AccordionGroup>
+  <Accordion title="InvalidSignature">
+    The Issuer Signed JWT signature verification failed. This can happen if:
+    - The issuer's signing key doesn't match the JWT signature
+    - The JWT has been tampered with
+    - The issuer's certificate is invalid
+  </Accordion>
+  
+  <Accordion title="InvalidKeyBinding">
+    The Key Binding JWT validation failed. This can occur when:
+    - The holder's key doesn't match the cnf claim
+    - The nonce doesn't match the expected value
+    - The KB-JWT signature is invalid
+    - The KB-JWT is missing or malformed
+  </Accordion>
+  
+  <Accordion title="UntrustedIssuer">
+    The credential issuer is not trusted according to the configured trust sources. To resolve:
+    - Add the issuer to your trust sources configuration
+    - Provide a valid issuer_chain in the request
+    - Check that your LOTL/TL configuration includes this issuer
+  </Accordion>
+  
+  <Accordion title="InvalidFormat">
+    The SD-JWT VC format is invalid. Ensure:
+    - The credential follows the format: issuer-jwt~disclosure~...~kb-jwt
+    - All components are valid Base64URL encoded strings
+    - The credential includes at least the issuer JWT and KB-JWT
+  </Accordion>
+  
+  <Accordion title="RevokedCredential">
+    The credential status indicates it has been revoked or suspended. This credential should not be accepted.
+  </Accordion>
+</AccordionGroup>
+
+## Configuration
+
+The validation behavior is controlled by these environment variables:
+
+- `VERIFIER_CLIENTMETADATA_VPFORMATS_SDJWTVC_ENABLED` - Enable SD-JWT VC support (default: true)
+- `VERIFIER_CLIENTMETADATA_VPFORMATS_SDJWTVC_SDJWTALGORITHMS` - Allowed signature algorithms (default: ES256)
+- `VERIFIER_CLIENTMETADATA_VPFORMATS_SDJWTVC_KBJWTALGORITHMS` - Allowed KB-JWT algorithms (default: ES256)
+- `VERIFIER_VALIDATION_SDJWTVC_STATUSCHECK_ENABLED` - Enable status checking (default: true)
+- `VERIFIER_VALIDATION_SDJWTVC_TYPEMETADATA_POLICY` - Type metadata validation policy
+
+See the [Credential Formats Configuration](/configuration/credential-formats) page for details.
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Validate MSO MDoc" icon="file-certificate" href="/api/utility/validate-mso-mdoc">
+    Validate MSO MDoc credentials
+  </Card>
+  <Card title="Initialize Transaction" icon="play" href="/api/verifier/initialize-transaction">
+    Start a presentation flow requesting SD-JWT VCs
+  </Card>
+</CardGroup>
+
+## Source Code Reference
+
+See `UtilityApi.kt:71-95` for the implementation of this endpoint.

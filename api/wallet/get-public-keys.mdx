@@ -1,0 +1,156 @@
+---
+title: "Get Public Keys"
+api: "GET /wallet/public-keys.json"
+description: "Retrieve the verifier's public JWK Set used for response encryption"
+---
+
+## Overview
+
+This endpoint returns the verifier's public JSON Web Key Set (JWKS) that wallets use to encrypt authorization responses when `response_mode` is set to `direct_post.jwt`.
+
+The public keys in this JWK Set correspond to ephemeral encryption key pairs generated for each presentation transaction. Wallets retrieve these keys to encrypt their responses, ensuring that only the verifier can decrypt and read the submitted credentials.
+
+<Info>
+This endpoint is automatically called by compliant OpenID4VP wallets when response encryption is required.
+</Info>
+
+## Request
+
+No parameters are required. This is a simple GET request.
+
+```bash cURL
+curl http://localhost:8080/wallet/public-keys.json
+```
+
+## Response
+
+<ResponseField name="keys" type="array">
+  An array of JSON Web Keys (JWK) in standard JWKS format
+  
+  <Expandable title="JWK structure">
+    <ResponseField name="kty" type="string">
+      Key type (e.g., "EC" for Elliptic Curve, "RSA" for RSA)
+    </ResponseField>
+    
+    <ResponseField name="use" type="string">
+      Public key use - typically "enc" for encryption
+    </ResponseField>
+    
+    <ResponseField name="kid" type="string">
+      Key identifier used to match keys during encryption/decryption
+    </ResponseField>
+    
+    <ResponseField name="crv" type="string">
+      Elliptic curve name (for EC keys, e.g., "P-256", "P-384", "P-521")
+    </ResponseField>
+    
+    <ResponseField name="x" type="string">
+      X coordinate of the elliptic curve point (Base64URL encoded)
+    </ResponseField>
+    
+    <ResponseField name="y" type="string">
+      Y coordinate of the elliptic curve point (Base64URL encoded)
+    </ResponseField>
+    
+    <ResponseField name="alg" type="string">
+      Algorithm intended for use with this key (optional)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Example
+
+<ResponseExample>
+```json 200 Response
+{
+  "keys": [
+    {
+      "kty": "EC",
+      "use": "enc",
+      "crv": "P-256",
+      "kid": "ephemeral-key-2024-03-09",
+      "x": "WKn-ZIGevcwGIyyrzFoZNBdaq9_TsqzGl96oc0CWuis",
+      "y": "y77t-RvAHRKTsSGdIYUfweuOvwrvDD-Q3Hv5J0fSKbE",
+      "alg": "ECDH-ES"
+    }
+  ]
+}
+```
+</ResponseExample>
+
+## Response Headers
+
+<ParamField path="Content-Type" type="string">
+  `application/jwk-set+json` - Standard MIME type for JWK Sets
+</ParamField>
+
+<ParamField path="Cache-Control" type="string">
+  Caching directives (typically no-cache for ephemeral keys)
+</ParamField>
+
+## Use Case
+
+When a wallet needs to submit an encrypted authorization response:
+
+<Steps>
+  <Step title="Wallet retrieves request object">
+    The wallet calls `GET /wallet/request.jwt/{requestId}` and receives the authorization request
+  </Step>
+  
+  <Step title="Check response mode">
+    If `response_mode` is `direct_post.jwt`, encryption is required
+  </Step>
+  
+  <Step title="Fetch public keys">
+    The wallet calls `GET /wallet/public-keys.json` to get the verifier's encryption keys
+  </Step>
+  
+  <Step title="Encrypt response">
+    The wallet encrypts the authorization response (vp_token, presentation_submission, state) as a JWE using the retrieved public key
+  </Step>
+  
+  <Step title="Post encrypted response">
+    The wallet submits the encrypted response to `POST /wallet/direct_post/{requestId}`
+  </Step>
+</Steps>
+
+## Configuration
+
+The key generation and algorithms are configured via:
+
+- `VERIFIER_CLIENTMETADATA_RESPONSEENCRYPTION_ALGORITHM` - Encryption algorithm (default: ECDH-ES)
+- `VERIFIER_CLIENTMETADATA_RESPONSEENCRYPTION_METHOD` - Encryption method (default: A128GCM)
+
+See the [Response Encryption Configuration](/configuration/response-encryption) page for details.
+
+## Security Considerations
+
+<Warning>
+The public keys returned by this endpoint are ephemeral and transaction-specific. They are used only for encrypting responses and cannot be used to impersonate the verifier.
+</Warning>
+
+<Note>
+Key rotation happens automatically. Each presentation transaction may use a different ephemeral key pair for enhanced security.
+</Note>
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Get Request Object" icon="file-code" href="/api/wallet/get-request-object">
+    Retrieve the authorization request that references this JWK Set
+  </Card>
+  <Card title="Direct Post" icon="paper-plane" href="/api/wallet/direct-post">
+    Submit the encrypted wallet response
+  </Card>
+  <Card title="Response Encryption Config" icon="lock" href="/configuration/response-encryption">
+    Configure encryption algorithms
+  </Card>
+</CardGroup>
+
+## OpenID4VP Specification
+
+This endpoint follows the [OpenID for Verifiable Presentations](https://openid.net/specs/openid-4-verifiable-presentations-1_0-final.html) specification for encrypted responses and the [JSON Web Key (JWK)](https://datatracker.ietf.org/doc/html/rfc7517) standard.
+
+## Source Code Reference
+
+See `WalletApi.kt:132-138` for the implementation of this endpoint.
